@@ -1,30 +1,40 @@
 # STATE.md
 
-## Done — all phases complete, all six gates green
-- Phase 0: pi-mono audit → ENGINE_NOTES.md, DECISION: PiEngine feasible
-  (@earendil-works/pi-{ai,agent-core}).
-- Phase 1: harness core (schema, trace, gates, checkpoint, context, reconcile,
-  budget, escalate, ToolExecutor, MockEngine, runner, cli) + 3-node demo.
-- Phase 2: real PiEngine via pi-agent-core with blast-radius interception;
-  tested network-free (injected streamFn) and through runMission.
-- Phase 3: derive (verbatim Herald prompt, schema-retry-once, refusal path) +
-  LLM layer (LlmClient, MockLlm, OpenRouterClient, pricing).
-- Phase 4: 10 benchmark tasks with ungameable node:test/git-diff gates + mock
-  engine-scripts; scripts/experiment.ts + setup-fixtures.ts.
-- Phase 5: six-gate sweep green, README.md written, final commit.
+## v0.1 — done (all six gates, real benchmark run)
+- Harness + real PiEngine + derive + 10-task benchmark. Cheap chain matched
+  opus 25/25 nodes at ~31x lower cost (RESULTS.md). Found+fixed the unbounded
+  max_tokens bug live.
 
-## Six-gate status (verified, no OPENROUTER_API_KEY)
-1. pnpm test ............ 74 tests pass
-2. pnpm typecheck ...... clean
-3. pnpm lint ........... clean
-4. node dist/cli.js run examples/demo.yaml --mock ... exit 0
-5. pnpm experiment --dry-run ........................ exit 0
-6. zero network in tests; no API key required for 1-5
-   (bonus: `pnpm experiment --mock` self-runs all 10 tasks x 2 chains at 100%)
+## v0.1.1 — done (ablation + hard benchmark), all gates green
+- Phase A — trace audit: finding #0 (traces weren't archived → now archived to
+  results/<runId>/<task>-<chain>.jsonl). Adversarially audited 08/09/10; found +
+  fixed 11 gameable gates across 03/05/06/08/09/10 (varied-input behavior gates,
+  fail-against-stub for tests-first, mutation guards for write-test nodes).
+  AUDIT.md records findings + verdict; every null solution re-verified blocked.
+- Phase B — ablation: `--harness off` raw mode (one goal-only attempt, then
+  score every node's done_check; no nodes/gates/checkpoints/blast/escalation) +
+  `cheap-raw` chain alias + chain.harness schema field + demo raw gate (4b).
+- Phase C — tasks 11–20 (hard): long-horizon consistency (8), 50-file localize,
+  12+ call-site migration, poisoned dependency (caught at node 4, verified),
+  ambiguous-brief-by-SPEC, test-first pair, two-package workspace (10), perf
+  gate, dependency upgrade + lockfile, 15-node mega-mission. Each: fixture +
+  mission + README (failure mode) + anti-gaming gates + reference mock scripts.
+  All pass --mock 100% (54 nodes). scripts/calibrate.ts (live, human-run;
+  flags any task ≥90% complete).
+- Phase D — experiment.ts: 20 tasks × {cheap-raw, cheap, knight-only}; columns
+  recovered/rungHist/confab/blastBlocks/trace; verdict leads with the ablation
+  delta + cost per COMPLETED mission. --dry-run validates 20 fixtures + 3-chain
+  schema. --mock defaults to the two scripted chains (raw is a live ablation).
+- Phase E — CLAUDE.md success contract updated (gate 4b raw demo; gate 5 = 20
+  tasks + 3-chain schema). README: three-column placeholder table + ablation
+  methodology. All 7 checks green (1 test, 2 typecheck, 3 lint, 4 demo, 4b raw
+  demo, 5 dry-run, 6 no-network).
 
 ## Blocked
 - none
 
 ## Next (handed to the human)
-- Pin real OpenRouter slugs/prices in chains.yaml, set OPENROUTER_API_KEY, and run
-  `pnpm experiment` to produce the real benchmark table (the thesis measurement).
+- `pnpm experiment --tasks 1..20` (full matrix, ~live) for the real v0.1.1 table,
+  and `pnpm calibrate --tasks 11..20 --chain cheap` to confirm the hard tasks
+  actually separate cheap-raw from cheap. Fill the README placeholder table from
+  the results.

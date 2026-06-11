@@ -74,22 +74,50 @@ source tree is never mutated. `squire trace <file>` pretty-prints any trace.
 ### `pnpm experiment` — the benchmark (the whole point)
 
 ```bash
-pnpm experiment --dry-run                      # validate all fixtures + missions, print schema (no API key)
-pnpm experiment --mock                         # self-run all 10 tasks x 2 chains offline (proves the suite)
-pnpm experiment --tasks 1..10 --chains cheap,knight-only   # the real run (needs OPENROUTER_API_KEY)
+pnpm experiment --dry-run                      # validate all 20 fixtures + 3-chain schema (no API key)
+pnpm experiment --mock                         # self-run tasks x {cheap,knight-only} offline (proves the suite)
+pnpm experiment --tasks 1..20                  # the real run, full matrix (needs OPENROUTER_API_KEY)
 ```
 
-Each task × chain runs in a fresh fixture copy under a temp git repo. Output is a
-printed table, `results/experiment-<ts>.csv`, and a three-line verdict:
+20 tasks (01–10 graded, 11–20 designed to hurt) × three chains
+(`cheap-raw`, `cheap`, `knight-only`) each run in a fresh fixture copy under a
+temp git repo. Output is a printed table, `results/experiment-<ts>.csv` (with the
+per-run trace archive under `results/<runId>/`), and a verdict that **leads with
+the ablation delta** and reports cost per *completed* mission:
 
 ```
-cheap-chain completion: X/10 missions, N% of nodes
-escalation rate: n node(s) hit rung>=3
-cost: $cheap vs $knight  (ratio)
+                       cheap-raw       cheap          knight-only
+                       (harness OFF)   (cheap+harness) (frontier)
+missions completed     ___ / 20        ___ / 20       ___ / 20
+nodes completed        ___ %           ___ %          ___ %
+recovered by ladder    n/a             ___            n/a
+cost / completed       $___            $___           $___
 ```
+(placeholder — fill from your live run; the harness lift is `cheap` minus `cheap-raw`.)
 
-`squire derive "<goal>"` is a convenience planner (one frontier call → a
-`mission.yaml`); the benchmark deliberately uses hand-written missions.
+`squire run examples/demo.yaml --harness off` runs the same ablation on one
+mission. `squire derive "<goal>"` is a convenience planner; the benchmark uses
+hand-written missions. `pnpm calibrate --tasks 11..20 --chain cheap` (live,
+human-run) reports per-task node completion and flags any task ≥90% complete as
+needing hardening.
+
+### Ablation methodology
+
+The thesis is that the *harness*, not the model, closes the gap — so the
+experiment compares three chains on identical tasks. **`cheap-raw`** is the
+control: the same cheap model with the harness OFF — one raw attempt given only
+the mission goal and a repo file listing (no node briefs, since decomposition is
+itself part of the harness under test), the four tools, and the global budget
+cap; no fresh-context nodes, no per-node gates mid-run, no checkpoints, no
+blast-radius, no escalation. When it stops, every node's `done_check` is scored.
+**`cheap`** is that same model *with* the scaffolding. **`knight-only`** is a
+frontier model with the harness. The number that matters is `cheap − cheap-raw`:
+how many more nodes/missions the cheap model completes purely from the harness,
+and at what cost per completed mission versus the frontier baseline. Tasks 11–20
+are built to separate the chains (long-horizon convention drift, poisoned
+dependencies caught early, migrations across many call sites), with anti-gaming
+guards (varied-input gates, fail-against-stub, mutation guards, compile/perf
+gates) so a node can't be passed vacuously — see `AUDIT.md`.
 
 ## Pinning real model slugs
 

@@ -17,8 +17,13 @@ proceed.
    — completes a 3-node mission end-to-end via MockEngine,
    exercising pack → run → reconcile → gate → checkpoint
    for real (real git ops in a temp dir), exit 0
-5. `pnpm experiment --dry-run` — validates all 10 task
-   fixtures + missions, prints the result table schema, exit 0
+4b. `node dist/cli.js run examples/demo.yaml --mock --harness off`
+   — ablation (raw, goal-only): one attempt then scores every
+   node's done_check, exit 0
+5. `pnpm experiment --dry-run` — validates all 20 task
+   fixtures + missions AND resolves the three-chain schema
+   (cheap-raw, cheap, knight-only), prints the result table
+   schema, exit 0
 6. Zero network calls in tests. `OPENROUTER_API_KEY` must not
    be required for gates 1–5.
 
