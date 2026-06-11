@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.squire/
+results/
+*.log
+.DS_Store

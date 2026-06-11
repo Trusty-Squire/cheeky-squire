@@ -1,0 +1,37 @@
+{
+  "name": "@cheekysquire/cli",
+  "version": "0.1.0",
+  "description": "Cheeky Squire — a verification harness that lets cheap LLMs complete long multi-step coding tasks reliably.",
+  "type": "module",
+  "bin": {
+    "squire": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --ext .ts",
+    "experiment": "tsx scripts/experiment.ts",
+    "setup-fixtures": "tsx scripts/setup-fixtures.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.79.1",
+    "@earendil-works/pi-ai": "^0.79.1",
+    "execa": "^9.5.2",
+    "fast-glob": "^3.3.3",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.20.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "eslint": "^8.57.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
