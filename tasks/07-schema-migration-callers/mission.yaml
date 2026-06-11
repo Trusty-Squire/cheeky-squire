@@ -1,0 +1,34 @@
+goal: "Add an email field across schema, migration, and the calling service."
+budget_usd: 1.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: schema
+    brief: >
+      Add an email field (default empty string "") to the defaultUser record
+      in src/schema.js, keeping name and age. Verify with the done_check.
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {defaultUser}=require('./src/schema.js'); process.exit(defaultUser.email==='' && defaultUser.name==='' ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: migration
+    brief: >
+      Update migrate(rec) in src/migrate.js so the returned record includes
+      email: rec.email || "" alongside name and age. Verify with the done_check.
+    deps: [schema]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {migrate}=require('./src/migrate.js'); const u=migrate({name:'a'}); const v=migrate({name:'a',email:'z@z'}); process.exit(u.email==='' && v.email==='z@z' ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: callers
+    brief: >
+      Update createUser(input) in src/service.js to render "<name> <<email>>"
+      (e.g. "Ada <ada@x.dev>") using the migrated record. Do not edit the test.
+      Run `node --test test/service.test.js`.
+    deps: [migration]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/service.test.js && git diff --quiet HEAD -- test/service.test.js"
+    budget_usd: 0.50

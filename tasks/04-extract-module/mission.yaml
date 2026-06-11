@@ -1,0 +1,25 @@
+goal: "Refactor: extract greetings into their own module without breaking tests."
+budget_usd: 1.00
+chain: cheap
+workdir: "."
+nodes:
+  - id: create-module
+    brief: >
+      Create src/greetings.js exporting greet(name) -> "Hello, <name>!" and
+      farewell(name) -> "Bye, <name>!", identical to the implementations
+      currently in src/app.js. Verify with the done_check command.
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const g=require('./src/greetings.js'); process.exit(g.greet('x')==='Hello, x!' && g.farewell('x')==='Bye, x!' ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: update-app
+    brief: >
+      Update src/app.js to re-export greet and farewell from ./greetings.js
+      instead of defining them inline (e.g. module.exports = require('./greetings.js')).
+      Do not modify src/greetings.js or the test. The full suite must stay green.
+    deps: [create-module]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/app.test.js && git diff --quiet HEAD -- test/app.test.js && git diff --quiet HEAD -- src/greetings.js"
+    budget_usd: 0.50

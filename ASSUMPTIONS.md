@@ -70,6 +70,24 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   appended; second failure exits 1. `{"error": "..."}` from the model
   exits 1 with that message. `--yes` skips the proceed prompt.
 
+## Benchmark fixtures
+- A18. Fixture gates use Node's built-in test runner (`node --test`) and
+  `node -e`/`node --check`, NOT vitest. This keeps every fixture dependency-free
+  and hermetic: the experiment copies a fixture into a temp dir and runs it with
+  no `npm install` and no network. SPEC §11 says "real vitest suites"; node:test
+  is an equivalent objective gate that satisfies the no-network/no-install
+  constraint. Fixtures are committed CommonJS `.js` files.
+- A19. Ungameable gates: nodes that must not touch their own checks have the
+  test file OUTSIDE their blast_radius, plus a `git diff --quiet HEAD -- <test>`
+  guard as defense-in-depth (and `node --check`/`grep` guards for test-writing
+  nodes). Verified: a cheating agent that rewrites a test is blast-denied and the
+  node still fails (test/experiment/experiment.test.ts).
+- A20. The experiment supports `--mock` (MockEngine + per-node engine-scripts in
+  each task's engine-scripts/) for offline, network-free self-verification of the
+  whole benchmark. The real measurement (`pnpm experiment` with a real chain) is
+  run by the human with OPENROUTER_API_KEY (SPEC §12). `--dry-run` validates all
+  fixtures+missions and prints the table schema (gate 5).
+
 ## CLI
 - A17. Commands: `run <mission> [--mock] [--chain <name>]`,
   `derive "<goal>" [--yes] [--chain <name>]`, `trace <file>`,

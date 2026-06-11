@@ -1,0 +1,42 @@
+goal: >
+  Implement the cart total feature from this SPEC paragraph, tests first:
+  "total(items) sums price*qty across items. If the subtotal is strictly
+  greater than 100, the whole order gets a 10% discount. Exactly 100 gets no
+  discount."
+budget_usd: 1.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: write-tests
+    brief: >
+      Write test/cart.test.js (node:test + node:assert) that imports total
+      from ../src/cart.js and encodes the SPEC: a subtotal of 50 stays 50,
+      and a subtotal of 120 becomes 108 (10% discount). Use the word
+      "discount" in a test name. The implementation does not exist yet, so the
+      gate only checks the file parses and encodes the discount.
+    context_globs: ["src/**"]
+    blast_radius: ["test/**"]
+    done_check: "node --check test/cart.test.js && grep -q discount test/cart.test.js"
+    budget_usd: 0.50
+
+  - id: implement
+    brief: >
+      Implement total(items) in src/cart.js per the SPEC: subtotal = sum of
+      price*qty; if subtotal > 100 apply a 10% discount to the whole order,
+      else no discount. Do not edit the test. Run `node --test test/cart.test.js`.
+    deps: [write-tests]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/cart.test.js && git diff --quiet HEAD -- test/cart.test.js"
+    budget_usd: 0.50
+
+  - id: boundary
+    brief: >
+      Add test/boundary.test.js asserting the boundary case: a subtotal of
+      exactly 100 receives NO discount (total stays 100). Run
+      `node --test test/boundary.test.js`.
+    deps: [implement]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["test/**"]
+    done_check: "node --test test/boundary.test.js && grep -q 100 test/boundary.test.js"
+    budget_usd: 0.50

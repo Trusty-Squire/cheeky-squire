@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Adding multiply to src/calc.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/calc.js",
+        "content": "function add(a, b) {\n  return a + b;\n}\nfunction multiply(a, b) {\n  return a * b;\n}\nmodule.exports = { add, multiply };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const c=require('./src/calc.js'); process.exit(c.multiply(3,4)===12?0:1)\"" } },
+    { "usage": { "in": 1000, "out": 150 } },
+    { "done": "Added multiply() to src/calc.js and verified it returns the product." }
+  ]
+}

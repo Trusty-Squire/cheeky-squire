@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Carrying email through the migration." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/migrate.js",
+        "content": "// Normalize an arbitrary input record into a full user record.\nfunction migrate(rec) {\n  return { name: rec.name || \"\", age: rec.age || 0, email: rec.email || \"\" };\n}\nmodule.exports = { migrate };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {migrate}=require('./src/migrate.js'); process.exit(migrate({name:'a'}).email===''?0:1)\"" } },
+    { "usage": { "in": 950, "out": 130 } },
+    { "done": "src/migrate.js now includes email in the normalized record; verified via node -e." }
+  ]
+}

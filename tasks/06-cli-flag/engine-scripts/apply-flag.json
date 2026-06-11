@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Applying shout behavior in src/greet.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/greet.js",
+        "content": "const { parseArgs } = require(\"./args.js\");\n\nfunction run(argv) {\n  const { name, shout } = parseArgs(argv);\n  const message = `Hello, ${name}!`;\n  return shout ? message.toUpperCase() : message;\n}\nmodule.exports = { run };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {run}=require('./src/greet.js'); process.exit(run(['--shout'])==='HELLO, WORLD!'?0:1)\"" } },
+    { "usage": { "in": 1100, "out": 150 } },
+    { "done": "src/greet.js upper-cases the greeting when --shout is set; verified via node -e." }
+  ]
+}

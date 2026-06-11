@@ -1,0 +1,27 @@
+goal: "Localize and fix a bug in a 3-stage pipeline, then add a regression test."
+budget_usd: 1.20
+chain: cheap
+workdir: "."
+nodes:
+  - id: fix-bug
+    brief: >
+      test/pipeline.test.js expects run("1,2,3") === "2-4-6": the pipeline
+      should DOUBLE each parsed number. It currently returns "2-3-4". Read
+      src/parse.js, src/transform.js, and src/format.js to localize the
+      defect, then fix it. Run `node --test test/pipeline.test.js`.
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/pipeline.test.js && git diff --quiet HEAD -- test/pipeline.test.js"
+    budget_usd: 0.70
+
+  - id: regression-test
+    brief: >
+      Add test/regression.test.js that imports transform from
+      ../src/transform.js and asserts it doubles its inputs
+      (e.g. transform([2,5]) deep-equals [4,10]). Run
+      `node --test test/regression.test.js`.
+    deps: [fix-bug]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["test/**"]
+    done_check: "node --test test/regression.test.js && grep -q transform test/regression.test.js"
+    budget_usd: 0.50

@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Writing test/multiply.test.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/multiply.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { multiply } = require(\"../src/calc.js\");\n\ntest(\"multiply\", () => {\n  assert.strictEqual(multiply(3, 4), 12);\n  assert.strictEqual(multiply(-2, 3), -6);\n  assert.strictEqual(multiply(0, 9), 0);\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/multiply.test.js" } },
+    { "usage": { "in": 1100, "out": 170 } },
+    { "done": "Wrote test/multiply.test.js covering multiply and ran `node --test test/multiply.test.js`, which exits 0." }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing reverse in src/strings.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/strings.js",
+        "content": "function reverse(str) {\n  return Array.from(str).reverse().join(\"\");\n}\nmodule.exports = { reverse };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/strings.test.js" } },
+    { "usage": { "in": 1000, "out": 140 } },
+    { "done": "Implemented reverse() in src/strings.js and ran `node --test test/strings.test.js`, which exits 0." }
+  ]
+}

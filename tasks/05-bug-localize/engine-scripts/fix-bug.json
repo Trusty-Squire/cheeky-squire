@@ -1,0 +1,12 @@
+{
+  "steps": [
+    { "text": "Reading the pipeline stages to localize the bug." },
+    { "tool": "read", "args": { "path": "src/parse.js" } },
+    { "tool": "read", "args": { "path": "src/transform.js" } },
+    { "tool": "read", "args": { "path": "src/format.js" } },
+    { "tool": "edit", "args": { "path": "src/transform.js", "oldString": "return nums.map((n) => n + 1);", "newString": "return nums.map((n) => n * 2);" } },
+    { "tool": "bash", "args": { "command": "node --test test/pipeline.test.js" } },
+    { "usage": { "in": 1600, "out": 200 } },
+    { "done": "Bug was in src/transform.js (added 1 instead of doubling). Fixed to n * 2; `node --test test/pipeline.test.js` exits 0." }
+  ]
+}

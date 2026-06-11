@@ -1,0 +1,53 @@
+goal: "Build a small calculator library across five dependency-ordered nodes."
+budget_usd: 2.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: op-add
+    brief: >
+      Create src/ops.js exporting add(a, b) = a + b. Verify with the done_check.
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const o=require('./src/ops.js'); process.exit(o.add(2,3)===5 ? 0 : 1)\""
+    budget_usd: 0.40
+
+  - id: op-subtract
+    brief: >
+      Update src/ops.js to also export subtract(a, b) = a - b, keeping add.
+      Verify with the done_check.
+    deps: [op-add]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const o=require('./src/ops.js'); process.exit(o.subtract(5,2)===3 && o.add(1,1)===2 ? 0 : 1)\""
+    budget_usd: 0.40
+
+  - id: op-multiply
+    brief: >
+      Update src/ops.js to also export multiply(a, b) = a * b, keeping add and
+      subtract. Verify with the done_check.
+    deps: [op-subtract]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const o=require('./src/ops.js'); process.exit(o.multiply(3,4)===12 && o.subtract(5,2)===3 ? 0 : 1)\""
+    budget_usd: 0.40
+
+  - id: evaluate
+    brief: >
+      Create src/evaluate.js exporting evaluate(op, a, b) that dispatches on op
+      ('+', '-', '*') to the corresponding function in ./ops.js and throws on
+      an unknown op. Verify with the done_check.
+    deps: [op-multiply]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {evaluate}=require('./src/evaluate.js'); process.exit(evaluate('+',2,3)===5 && evaluate('-',5,2)===3 && evaluate('*',2,3)===6 ? 0 : 1)\""
+    budget_usd: 0.60
+
+  - id: suite
+    brief: >
+      Add test/calc.test.js (node:test) covering evaluate for '+', '-', and
+      '*'. Run `node --test test/calc.test.js`.
+    deps: [evaluate]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["test/**"]
+    done_check: "node --test test/calc.test.js && grep -q evaluate test/calc.test.js"
+    budget_usd: 0.70

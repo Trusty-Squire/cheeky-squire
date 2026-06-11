@@ -2,21 +2,22 @@
 
 ## Done
 - Phase 0: pi-mono audit → ENGINE_NOTES.md, DECISION: PiEngine feasible.
-- Phase 1: harness core (mock-first), all modules in SPEC commit order:
-  schema, trace, gates, checkpoint, context, reconcile, budget, escalate,
-  ToolExecutor, MockEngine, runner, cli (run + trace). chains.yaml + demo
-  mission + fixture + engine scripts.
-  - Gate 4 PASSES: `node dist/cli.js run examples/demo.yaml --mock` runs a
-    3-node mission end-to-end (real git in a temp dir), exit 0.
-  - 54 tests green, typecheck clean, lint clean.
+- Phase 1: harness core (schema, trace, gates, checkpoint, context, reconcile,
+  budget, escalate, ToolExecutor, MockEngine, runner, cli) + demo. Gate 4 green.
+- Phase 2: real PiEngine via @earendil-works/pi-agent-core, blast-radius
+  interception, tested network-free (injected streamFn) + through runMission.
+- Phase 3: derive (verbatim Herald prompt, retry-once, refusal path) + LLM layer
+  (LlmClient, MockLlm, OpenRouterClient, pricing).
+- Phase 4: benchmark suite — 10 tasks (01..10) with hand-written missions,
+  ungameable node:test/git-diff gates, mock engine-scripts; scripts/experiment.ts
+  + setup-fixtures.ts. `pnpm experiment --mock` completes all 10 tasks x 2 chains
+  (100% nodes). Gate 5 (`pnpm experiment --dry-run`) green.
 
 ## In progress
-- Phase 2: real PiEngine (src/engine/pi.ts) via @earendil-works/pi-agent-core,
-  with blast-radius interception. (pi.ts is currently a throwing placeholder.)
+- Phase 5: close — run all six gates, write README.md, final commit.
 
 ## Blocked
 - none
 
 ## Next
-- Phase 2 PiEngine + interception tests → Phase 3 derive → Phase 4 fixtures +
-  experiment → Phase 5 close (six gates + README).
+- Six-gate sweep, README, final STATE update.

@@ -1,0 +1,15 @@
+goal: "Implement reverse() in src/strings.js to satisfy its test."
+budget_usd: 0.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: implement-reverse
+    brief: >
+      src/strings.js exports reverse(str) but it throws "not implemented".
+      Implement it to return the input string reversed, matching
+      test/strings.test.js. Run `node --test test/strings.test.js` before
+      declaring done.
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/strings.test.js && git diff --quiet HEAD -- test/strings.test.js"
+    budget_usd: 0.50

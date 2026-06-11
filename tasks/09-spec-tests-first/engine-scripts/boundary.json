@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Adding the boundary test for exactly 100." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/boundary.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { total } = require(\"../src/cart.js\");\n\ntest(\"exactly 100 gets no discount\", () => {\n  assert.strictEqual(total([{ price: 100, qty: 1 }]), 100);\n  assert.strictEqual(total([{ price: 25, qty: 4 }]), 100);\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/boundary.test.js" } },
+    { "usage": { "in": 1000, "out": 150 } },
+    { "done": "Added test/boundary.test.js for the exactly-100 boundary; `node --test test/boundary.test.js` exits 0." }
+  ]
+}

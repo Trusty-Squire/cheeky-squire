@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing total() per the SPEC." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/cart.js",
+        "content": "// total(items): items is an array of { price, qty }.\n// Subtotal = sum of price * qty. If the subtotal is strictly greater than\n// 100, apply a 10% discount to the whole order. Return the final total.\nfunction total(items) {\n  const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);\n  return subtotal > 100 ? subtotal * 0.9 : subtotal;\n}\nmodule.exports = { total };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/cart.test.js" } },
+    { "usage": { "in": 1100, "out": 170 } },
+    { "done": "Implemented total() in src/cart.js; `node --test test/cart.test.js` exits 0." }
+  ]
+}

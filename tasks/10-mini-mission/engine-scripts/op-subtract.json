@@ -1,0 +1,9 @@
+{
+  "steps": [
+    { "text": "Adding subtract to src/ops.js." },
+    { "tool": "write", "args": { "path": "src/ops.js", "content": "function add(a, b) {\n  return a + b;\n}\nfunction subtract(a, b) {\n  return a - b;\n}\nmodule.exports = { add, subtract };\n" } },
+    { "tool": "bash", "args": { "command": "node -e \"const o=require('./src/ops.js'); process.exit(o.subtract(5,2)===3?0:1)\"" } },
+    { "usage": { "in": 850, "out": 120 } },
+    { "done": "Added subtract() to src/ops.js, keeping add; verified via node -e." }
+  ]
+}

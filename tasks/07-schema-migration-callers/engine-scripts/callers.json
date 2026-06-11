@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Updating the service to render the email." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/service.js",
+        "content": "const { migrate } = require(\"./migrate.js\");\n\n// Render a user as a display string.\nfunction createUser(input) {\n  const u = migrate(input);\n  return `${u.name} <${u.email}>`;\n}\nmodule.exports = { createUser };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/service.test.js" } },
+    { "usage": { "in": 1100, "out": 150 } },
+    { "done": "src/service.js now renders name and email; `node --test test/service.test.js` exits 0." }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Adding a regression test for transform." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/regression.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { transform } = require(\"../src/transform.js\");\n\ntest(\"transform doubles each input\", () => {\n  assert.deepStrictEqual(transform([2, 5]), [4, 10]);\n  assert.deepStrictEqual(transform([0]), [0]);\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/regression.test.js" } },
+    { "usage": { "in": 1100, "out": 160 } },
+    { "done": "Added test/regression.test.js pinning the doubling behavior; `node --test test/regression.test.js` exits 0." }
+  ]
+}

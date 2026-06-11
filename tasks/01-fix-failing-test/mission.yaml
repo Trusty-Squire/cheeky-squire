@@ -1,0 +1,14 @@
+goal: "Fix the failing add() unit test in src/math.js."
+budget_usd: 0.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: fix-add
+    brief: >
+      The test test/math.test.js expects add(a, b) to return the sum a + b,
+      but src/math.js currently returns a - b. Fix src/math.js so the test
+      passes. Run `node --test test/math.test.js` before declaring done.
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/math.test.js && git diff --quiet HEAD -- test/math.test.js"
+    budget_usd: 0.50

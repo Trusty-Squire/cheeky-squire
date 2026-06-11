@@ -1,0 +1,35 @@
+goal: "Rename the exported compute() to evaluate() across all files; keep it compiling."
+budget_usd: 1.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: rename-def
+    brief: >
+      In src/calculate.js, rename the exported function compute to evaluate
+      (same body, a + b). After this change calculate.js must export evaluate
+      and no longer export compute. Verify with the done_check.
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const c=require('./src/calculate.js'); process.exit(typeof c.evaluate==='function' && c.compute===undefined ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: update-callers
+    brief: >
+      Update src/runner.js to import and call evaluate (not compute) from
+      ./calculate.js, keeping runAll's behavior. Verify with the done_check.
+    deps: [rename-def]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {runAll}=require('./src/runner.js'); process.exit(JSON.stringify(runAll([[1,1],[2,3]]))==='[2,5]' ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: reexport-and-compile
+    brief: >
+      Update src/index.js to re-export evaluate (and runAll) instead of compute.
+      The whole module set must parse and the test suite must pass. Do not edit
+      the test. The done_check runs a syntax check on every src file and the suite.
+    deps: [update-callers]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "for f in src/*.js; do node --check \"$f\" || exit 1; done && node --test test/api.test.js && git diff --quiet HEAD -- test/api.test.js"
+    budget_usd: 0.50

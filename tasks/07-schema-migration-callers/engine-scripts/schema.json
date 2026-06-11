@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Adding email to the default user schema." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/schema.js",
+        "content": "// The canonical default user record.\nconst defaultUser = { name: \"\", age: 0, email: \"\" };\nmodule.exports = { defaultUser };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {defaultUser}=require('./src/schema.js'); process.exit('email' in defaultUser?0:1)\"" } },
+    { "usage": { "in": 900, "out": 120 } },
+    { "done": "Added email default to src/schema.js; verified via node -e." }
+  ]
+}

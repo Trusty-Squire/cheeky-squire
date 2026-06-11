@@ -1,0 +1,9 @@
+{
+  "steps": [
+    { "text": "Writing the calculator test suite." },
+    { "tool": "write", "args": { "path": "test/calc.test.js", "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { evaluate } = require(\"../src/evaluate.js\");\n\ntest(\"evaluate dispatches all ops\", () => {\n  assert.strictEqual(evaluate(\"+\", 2, 3), 5);\n  assert.strictEqual(evaluate(\"-\", 9, 4), 5);\n  assert.strictEqual(evaluate(\"*\", 2, 6), 12);\n});\n\ntest(\"evaluate throws on unknown op\", () => {\n  assert.throws(() => evaluate(\"/\", 1, 1));\n});\n" } },
+    { "tool": "bash", "args": { "command": "node --test test/calc.test.js" } },
+    { "usage": { "in": 1300, "out": 200 } },
+    { "done": "Added test/calc.test.js covering evaluate; `node --test test/calc.test.js` exits 0." }
+  ]
+}

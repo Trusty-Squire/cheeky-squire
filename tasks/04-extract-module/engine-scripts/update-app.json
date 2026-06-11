@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Re-pointing src/app.js at the extracted module." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/app.js",
+        "content": "module.exports = require(\"./greetings.js\");\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/app.test.js" } },
+    { "usage": { "in": 1100, "out": 130 } },
+    { "done": "src/app.js now re-exports from ./greetings.js; ran `node --test test/app.test.js`, which exits 0." }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "steps": [
+    { "text": "Fixing the operator in src/math.js." },
+    { "tool": "edit", "args": { "path": "src/math.js", "oldString": "return a - b;", "newString": "return a + b;" } },
+    { "tool": "bash", "args": { "command": "node --test test/math.test.js" } },
+    { "usage": { "in": 900, "out": 120 } },
+    { "done": "Changed src/math.js to return a + b and ran `node --test test/math.test.js`, which exits 0." }
+  ]
+}

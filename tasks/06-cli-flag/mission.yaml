@@ -1,0 +1,36 @@
+goal: "Add a --shout flag end-to-end: argument parsing, behavior, and tests."
+budget_usd: 1.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: parse-flag
+    brief: >
+      Extend parseArgs in src/args.js so the result includes shout: a boolean
+      that defaults to false and becomes true when "--shout" appears in argv.
+      Keep --name working. Verify with the done_check command.
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {parseArgs}=require('./src/args.js'); const a=parseArgs(['--shout']); const b=parseArgs([]); process.exit(a.shout===true && b.shout===false ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: apply-flag
+    brief: >
+      Update run(argv) in src/greet.js so that when shout is true the returned
+      greeting is upper-cased (e.g. "HELLO, ADA!"), otherwise unchanged. Use
+      the shout field from parseArgs. Verify with the done_check command.
+    deps: [parse-flag]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {run}=require('./src/greet.js'); process.exit(run(['--shout','--name','Ada'])==='HELLO, ADA!' && run(['--name','Ada'])==='Hello, Ada!' ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: test-flag
+    brief: >
+      Add test/shout.test.js using node:test that imports run from
+      ../src/greet.js and asserts the --shout behavior (upper-cased when
+      present, normal otherwise). Run `node --test test/shout.test.js`.
+    deps: [parse-flag, apply-flag]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["test/**"]
+    done_check: "node --test test/shout.test.js && grep -q shout test/shout.test.js"
+    budget_usd: 0.50

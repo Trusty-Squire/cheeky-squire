@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Adding --shout parsing to src/args.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/args.js",
+        "content": "// Parse CLI args. Supports --name <value> and --shout.\nfunction parseArgs(argv) {\n  const out = { name: \"world\", shout: false };\n  for (let i = 0; i < argv.length; i++) {\n    if (argv[i] === \"--name\") out.name = argv[++i];\n    else if (argv[i] === \"--shout\") out.shout = true;\n  }\n  return out;\n}\nmodule.exports = { parseArgs };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {parseArgs}=require('./src/args.js'); process.exit(parseArgs(['--shout']).shout===true?0:1)\"" } },
+    { "usage": { "in": 1000, "out": 160 } },
+    { "done": "src/args.js now parses --shout into a boolean; verified via node -e." }
+  ]
+}

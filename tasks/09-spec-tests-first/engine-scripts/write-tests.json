@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Writing the cart tests first, from the SPEC." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/cart.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { total } = require(\"../src/cart.js\");\n\ntest(\"no discount at or below 100\", () => {\n  assert.strictEqual(total([{ price: 50, qty: 1 }]), 50);\n});\n\ntest(\"10% discount above 100\", () => {\n  assert.strictEqual(total([{ price: 60, qty: 2 }]), 108);\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --check test/cart.test.js" } },
+    { "usage": { "in": 1100, "out": 180 } },
+    { "done": "Wrote test/cart.test.js encoding the SPEC (subtotal 50 -> 50, 120 -> 108 with discount); it parses via node --check." }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Renaming compute to evaluate in src/calculate.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/calculate.js",
+        "content": "// Adds two numbers. Exported as `evaluate`.\nfunction evaluate(a, b) {\n  return a + b;\n}\nmodule.exports = { evaluate };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const c=require('./src/calculate.js'); process.exit(typeof c.evaluate==='function' && c.compute===undefined?0:1)\"" } },
+    { "usage": { "in": 950, "out": 130 } },
+    { "done": "Renamed compute to evaluate in src/calculate.js; verified the new export and the absence of compute." }
+  ]
+}

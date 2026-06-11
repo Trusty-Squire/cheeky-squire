@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Adding test/shout.test.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/shout.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { run } = require(\"../src/greet.js\");\n\ntest(\"--shout upper-cases the greeting\", () => {\n  assert.strictEqual(run([\"--shout\", \"--name\", \"Ada\"]), \"HELLO, ADA!\");\n  assert.strictEqual(run([\"--name\", \"Ada\"]), \"Hello, Ada!\");\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/shout.test.js" } },
+    { "usage": { "in": 1100, "out": 170 } },
+    { "done": "Added test/shout.test.js for the --shout flag; `node --test test/shout.test.js` exits 0." }
+  ]
+}

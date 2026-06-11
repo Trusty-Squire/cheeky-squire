@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Re-exporting evaluate from src/index.js and compiling." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/index.js",
+        "content": "const { evaluate } = require(\"./calculate.js\");\nconst { runAll } = require(\"./runner.js\");\nmodule.exports = { evaluate, runAll };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "for f in src/*.js; do node --check \"$f\" || exit 1; done && node --test test/api.test.js" } },
+    { "usage": { "in": 1200, "out": 160 } },
+    { "done": "src/index.js re-exports evaluate; all src files pass node --check and `node --test test/api.test.js` exits 0." }
+  ]
+}

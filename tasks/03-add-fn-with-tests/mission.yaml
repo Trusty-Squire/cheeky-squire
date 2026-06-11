@@ -1,0 +1,25 @@
+goal: "Add multiply() to src/calc.js and write a test suite for it."
+budget_usd: 1.00
+chain: cheap
+workdir: "."
+nodes:
+  - id: impl-multiply
+    brief: >
+      Add a multiply(a, b) function to src/calc.js that returns a * b, and
+      export it alongside add. Keep add unchanged. Verify by running the
+      done_check command.
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const c=require('./src/calc.js'); process.exit(c.multiply(3,4)===12 && c.multiply(0,5)===0 && c.add(1,1)===2 ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: test-multiply
+    brief: >
+      Write test/multiply.test.js using node:test and node:assert that
+      imports multiply from ../src/calc.js and asserts several cases
+      (positive, negative, zero). Run `node --test test/multiply.test.js`.
+    deps: [impl-multiply]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["test/**"]
+    done_check: "node --test test/multiply.test.js && grep -q multiply test/multiply.test.js"
+    budget_usd: 0.50
