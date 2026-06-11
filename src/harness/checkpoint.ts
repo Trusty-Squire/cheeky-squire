@@ -1,0 +1,81 @@
+import { execa } from "execa";
+
+/**
+ * Git operations for the node lifecycle. Node pass = commit; node fail =
+ * reset --hard to the last green checkpoint BEFORE the next attempt
+ * (SPEC §5, architecture invariants).
+ *
+ * All commands use execa argument arrays — never string-concatenated.
+ */
+
+async function git(cwd: string, args: string[]): Promise<string> {
+  const result = await execa("git", args, { cwd, reject: true });
+  return result.stdout.trim();
+}
+
+/** Current HEAD commit sha. */
+export async function head(cwd: string): Promise<string> {
+  return git(cwd, ["rev-parse", "HEAD"]);
+}
+
+/** Initialize a fresh repo with an initial commit of whatever is present. */
+export async function initRepo(
+  cwd: string,
+  opts: { name?: string; email?: string } = {},
+): Promise<string> {
+  await git(cwd, ["init", "-q"]);
+  await git(cwd, ["config", "user.email", opts.email ?? "squire@cheekysquire.dev"]);
+  await git(cwd, ["config", "user.name", opts.name ?? "Cheeky Squire"]);
+  await git(cwd, ["add", "-A"]);
+  await git(cwd, ["commit", "-q", "-m", "chore: fixture baseline", "--allow-empty"]);
+  return head(cwd);
+}
+
+/** Stage everything and commit a node pass. Returns the new sha. */
+export async function commitNode(cwd: string, nodeId: string): Promise<string> {
+  await git(cwd, ["add", "-A"]);
+  await git(cwd, ["commit", "-q", "-m", `node(${nodeId}): pass`, "--allow-empty"]);
+  return head(cwd);
+}
+
+/**
+ * Reset hard to a known-green sha and drop untracked files/dirs from the
+ * failed attempt, so the next rung starts from a clean checkpoint.
+ */
+export async function resetTo(cwd: string, sha: string): Promise<void> {
+  await git(cwd, ["reset", "--hard", "-q", sha]);
+  await git(cwd, ["clean", "-fdq"]);
+}
+
+/** Files changed in the working tree relative to a sha (staged + unstaged + untracked). */
+export async function changedFilesSince(cwd: string, sha: string): Promise<string[]> {
+  const tracked = await git(cwd, ["diff", "--name-only", sha]);
+  const untracked = await git(cwd, ["ls-files", "--others", "--exclude-standard"]);
+  const set = new Set<string>();
+  for (const f of [...tracked.split("\n"), ...untracked.split("\n")]) {
+    const trimmed = f.trim();
+    if (trimmed) set.add(trimmed);
+  }
+  return [...set].sort();
+}
+
+/** Files currently dirty in the working tree (porcelain, path only). */
+export async function dirtyFiles(cwd: string): Promise<string[]> {
+  // NUL-separated porcelain so the positional XY-status prefix is unambiguous
+  // and paths with spaces/specials survive untouched.
+  const result = await execa("git", ["status", "--porcelain", "-z"], { cwd, reject: true });
+  const files: string[] = [];
+  for (const entry of result.stdout.split("\0")) {
+    if (!entry) continue;
+    // "XY <path>" — status is exactly 2 chars then a separator space.
+    const path = entry.slice(3);
+    if (path) files.push(path);
+  }
+  return files.sort();
+}
+
+/** True if the working tree has no changes. */
+export async function isClean(cwd: string): Promise<boolean> {
+  const result = await execa("git", ["status", "--porcelain"], { cwd, reject: true });
+  return result.stdout === "";
+}
