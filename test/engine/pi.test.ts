@@ -8,7 +8,7 @@ import {
   type Usage,
 } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
-import { PiEngine } from "../../src/engine/pi.js";
+import { PiEngine, outputCapFor } from "../../src/engine/pi.js";
 import type { AttemptRequest, EngineEvent } from "../../src/engine/types.js";
 
 /** Build a full Usage object from input/output token counts. */
@@ -143,6 +143,35 @@ describe("PiEngine (network-free via injected streamFn)", () => {
     const denials = events.filter((e) => e.kind === "blast_denied");
     expect(denials.length).toBe(3);
     expect(events.some((e) => e.kind === "error")).toBe(true);
+  });
+
+  it("bounds output max_tokens on every call (avoids provider over-pre-authorization)", async () => {
+    const seen: (number | undefined)[] = [];
+    const recordingStream: StreamFn = ((model: unknown, context: unknown, options: { maxTokens?: number }) => {
+      seen.push(options?.maxTokens);
+      const msg = {
+        role: "assistant" as const,
+        content: [{ type: "text" as const, text: "done" }],
+        api: "openai-completions",
+        provider: "openrouter",
+        model: "test/model",
+        usage: usage(10, 5),
+        stopReason: "stop" as const,
+        timestamp: 0,
+      };
+      const stream = createAssistantMessageEventStream();
+      stream.push({ type: "start", partial: msg });
+      stream.push({ type: "done", reason: "stop", message: msg });
+      return stream;
+    }) as unknown as StreamFn;
+
+    const engine = new PiEngine({ streamFn: recordingStream });
+    await collect(engine, req({ maxTokens: 40_000 }));
+    expect(seen.length).toBeGreaterThan(0);
+    // 40k requested context budget must be capped to the 8192 output ceiling.
+    expect(seen.every((m) => m === 8192)).toBe(true);
+    expect(outputCapFor(40_000)).toBe(8192);
+    expect(outputCapFor(100)).toBe(100);
   });
 
   it("runs bash and reads files", async () => {

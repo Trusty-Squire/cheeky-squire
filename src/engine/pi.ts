@@ -2,6 +2,7 @@ import { Agent, type AgentTool, type AgentEvent } from "@earendil-works/pi-agent
 import {
   Type,
   EventStream,
+  streamSimple,
   type Model,
   type AssistantMessage,
   type TextContent,
@@ -14,6 +15,13 @@ import type { AttemptRequest, Engine, EngineEvent, ModelRef, ToolName } from "./
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const MAX_BLAST_VIOLATIONS = 3;
+/**
+ * Hard cap on output tokens per LLM call. Without this, providers pre-authorize
+ * the model's full max output (e.g. 32k for Opus → ~$2.40), which both wastes
+ * the budget pre-check and triggers 402s on low-balance accounts. Coding edits
+ * never need this much output.
+ */
+const OUTPUT_MAX_TOKENS = 8_192;
 
 export interface PiEngineOptions {
   /** Inject a fake stream function for tests (no network). Default: pi-ai streamSimple. */
@@ -44,6 +52,15 @@ export class PiEngine implements Engine {
     );
     const state: { denied: number; agent?: Agent; aborted: boolean } = { denied: 0, aborted: false };
     let finalText = "";
+    let providerError: string | undefined;
+
+    // Bound output tokens so providers don't pre-authorize their full max
+    // (e.g. Opus's 32k → ~$2.40, which 402s low-balance accounts). Applied
+    // even around an injected streamFn so the cap is always enforced.
+    const outputCap = outputCapFor(req.maxTokens);
+    const base = this.streamFn ?? (streamSimple as StreamFn);
+    const streamFn: StreamFn = ((model, context, options) =>
+      base(model, context, { ...(options ?? {}), maxTokens: options?.maxTokens ?? outputCap })) as StreamFn;
 
     const tools = makeTools(exec, (id, name, path, reason) => {
       state.denied += 1;
@@ -57,7 +74,7 @@ export class PiEngine implements Engine {
     const agent = new Agent({
       initialState: { systemPrompt: req.systemPrompt, model, tools },
       getApiKey: () => req.model.apiKey,
-      ...(this.streamFn ? { streamFn: this.streamFn } : {}),
+      streamFn,
     });
     state.agent = agent;
 
@@ -83,8 +100,12 @@ export class PiEngine implements Engine {
           const m = event.message;
           if (isAssistant(m)) {
             out.push({ kind: "usage", inTokens: m.usage.input, outTokens: m.usage.output });
-            const text = assistantText(m);
-            if (text) finalText = text;
+            if (m.stopReason === "error" || m.stopReason === "aborted") {
+              providerError = m.errorMessage || assistantText(m) || `provider ${m.stopReason}`;
+            } else {
+              const text = assistantText(m);
+              if (text) finalText = text;
+            }
           }
           break;
         }
@@ -103,6 +124,8 @@ export class PiEngine implements Engine {
         await agent.prompt(userPrompt);
         if (state.aborted) {
           out.push({ kind: "error", message: `attempt aborted after ${MAX_BLAST_VIOLATIONS} blast-radius violations` });
+        } else if (providerError) {
+          out.push({ kind: "error", message: providerError });
         } else {
           out.push({ kind: "done", finalMessage: finalText || agent.state.errorMessage || "" });
         }
@@ -116,6 +139,11 @@ export class PiEngine implements Engine {
     for await (const ev of out) yield ev;
     await run;
   }
+}
+
+/** Output-token cap for one call: never more than OUTPUT_MAX_TOKENS, never above the request budget. */
+export function outputCapFor(reqMaxTokens: number): number {
+  return Math.min(OUTPUT_MAX_TOKENS, Math.max(1, reqMaxTokens));
 }
 
 /** Construct a pi-ai Model for an arbitrary slug (placeholder-friendly, via OpenRouter). */
