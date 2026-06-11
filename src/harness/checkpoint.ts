@@ -1,3 +1,5 @@
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { execa } from "execa";
 
 /**
@@ -78,4 +80,29 @@ export async function dirtyFiles(cwd: string): Promise<string[]> {
 export async function isClean(cwd: string): Promise<boolean> {
   const result = await execa("git", ["status", "--porcelain"], { cwd, reject: true });
   return result.stdout === "";
+}
+
+/**
+ * Unified diff of the working tree (including new files via intent-to-add)
+ * against a sha. Used to attach the prior attempt's diff on rung 4. The
+ * intent-to-add marks are cleared by the next resetTo.
+ */
+export async function diffSince(cwd: string, sha: string): Promise<string> {
+  await git(cwd, ["add", "-A", "-N"]);
+  const result = await execa("git", ["diff", sha], { cwd, reject: false });
+  return result.stdout;
+}
+
+/**
+ * Append ignore patterns to .git/info/exclude so the harness's own artifacts
+ * (e.g. .squire/) are never staged by `git add -A` nor removed by `git clean`.
+ */
+export function addGitExclude(cwd: string, patterns: string[]): void {
+  const excludeFile = join(cwd, ".git", "info", "exclude");
+  const existing = existsSync(excludeFile) ? readFileSync(excludeFile, "utf8") : "";
+  const lines = new Set(existing.split("\n"));
+  const toAdd = patterns.filter((p) => !lines.has(p));
+  if (toAdd.length === 0) return;
+  const prefix = existing === "" || existing.endsWith("\n") ? "" : "\n";
+  appendFileSync(excludeFile, prefix + toAdd.join("\n") + "\n");
 }
