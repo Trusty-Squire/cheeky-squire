@@ -1,0 +1,29 @@
+{
+  "steps": [
+    { "text": "Establishing the convention: alpha handler, index that registers it, and the convention test that re-checks all handlers." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/handlers/alpha.js",
+        "content": "// Handler convention: module src/handlers/<name>.js exports { name, handle }\n// where name is kebab-case and equals the filename stem, and\n// handle(x) returns `${name}:${x}`.\nmodule.exports = { name: \"alpha\", handle: (x) => `alpha:${x}` };\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/index.js",
+        "content": "// Registers every handler and re-exports the registry surface.\nconst registry = require(\"./registry.js\");\nconst alpha = require(\"./handlers/alpha.js\");\nregistry.register(alpha);\nmodule.exports = { register: registry.register, all: registry.all };\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/convention.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { all } = require(\"../src/index.js\");\n\nconst NAME_RE = /^[a-z]+(-[a-z]+)*$/;\n\ntest(\"every registered handler honors the convention\", () => {\n  const handlers = all();\n  assert.ok(handlers.length >= 1, \"at least one handler must be registered\");\n  for (const h of handlers) {\n    assert.ok(NAME_RE.test(h.name), `name not kebab-case: ${h.name}`);\n    assert.strictEqual(\n      h.handle(\"z\"),\n      h.name + \":z\",\n      `handle output mismatch for ${h.name}`\n    );\n  }\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/convention.test.js" } },
+    { "usage": { "in": 1600, "out": 360 } },
+    { "done": "Created src/handlers/alpha.js, src/index.js (registers alpha + re-exports registry), and test/convention.test.js looping over all() to enforce the convention. Tests pass." }
+  ]
+}

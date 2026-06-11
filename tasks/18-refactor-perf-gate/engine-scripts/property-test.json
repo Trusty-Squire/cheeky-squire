@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Writing test/property.test.js asserting dedupe properties (idempotence, first-occurrence order, no duplicates) on varied inputs." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/property.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { dedupe } = require(\"../src/dedupe.js\");\n\nconst cases = [\n  [3, 1, 2, 1, 3, 2],\n  [\"c\", \"a\", \"c\", \"b\", \"a\"],\n  [5, 5, 5, 5],\n  [],\n  [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3],\n];\n\nfunction firstOccurrenceOrder(arr) {\n  const seen = new Set();\n  const out = [];\n  for (const x of arr) {\n    if (!seen.has(x)) {\n      seen.add(x);\n      out.push(x);\n    }\n  }\n  return out;\n}\n\ntest(\"dedupe is idempotent\", () => {\n  for (const x of cases) {\n    assert.deepStrictEqual(dedupe(dedupe(x)), dedupe(x));\n  }\n});\n\ntest(\"dedupe preserves first-occurrence order\", () => {\n  for (const x of cases) {\n    assert.deepStrictEqual(dedupe(x), firstOccurrenceOrder(x));\n  }\n});\n\ntest(\"dedupe output has no duplicates\", () => {\n  for (const x of cases) {\n    const out = dedupe(x);\n    assert.strictEqual(new Set(out).size, out.length);\n  }\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/property.test.js" } },
+    { "usage": { "in": 1500, "out": 320 } },
+    { "done": "Added test/property.test.js asserting idempotence, first-occurrence order preservation, and no-duplicates across five varied inputs; `node --test test/property.test.js` exits 0." }
+  ]
+}

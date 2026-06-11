@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing clamp in packages/core/src/numbers.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "packages/core/src/numbers.js",
+        "content": "function clamp(n, lo, hi) {\n  if (n < lo) return lo;\n  if (n > hi) return hi;\n  return n;\n}\nmodule.exports = { clamp };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {clamp}=require('./packages/core/src/numbers.js'); process.exit(clamp(-5,0,100)===0 && clamp(250,0,100)===100 && clamp(42,0,100)===42?0:1)\"" } },
+    { "usage": { "in": 1000, "out": 150 } },
+    { "done": "Implemented clamp() honoring lo/hi bounds. Verified via node -e." }
+  ]
+}

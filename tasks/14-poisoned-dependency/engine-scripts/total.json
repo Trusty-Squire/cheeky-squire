@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing total(store) in src/total.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/total.js",
+        "content": "// Sum amountCents across every record in a store.\nfunction total(store) {\n  return store.all().reduce((sum, r) => sum + r.amountCents, 0);\n}\nmodule.exports = { total };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {total}=require('./src/total.js'); const {Store}=require('./src/store.js'); const {make}=require('./src/record.js'); const s=new Store(); s.add(make(1,10)); s.add(make(2,20)); process.exit(total(s)===30?0:1)\"" } },
+    { "usage": { "in": 1000, "out": 120 } },
+    { "done": "Implemented total() summing amountCents in src/total.js; verified." }
+  ]
+}

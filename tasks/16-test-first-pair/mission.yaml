@@ -1,0 +1,41 @@
+goal: >
+  Build parseDuration(s) tests-first from a prose SPEC. parseDuration takes a
+  string of one or more `<number><unit>` segments with units h (hours=3600s),
+  m (minutes=60s), s (seconds=1s) — e.g. '1h30m' -> 5400, '90m' -> 5400,
+  '2h' -> 7200, '45s' -> 45, '1h1m1s' -> 3661. Whitespace is not allowed. An
+  empty string or an invalid format throws. Write the tests first (against the
+  throwing stub), then implement so the suite passes.
+budget_usd: 1.20
+chain: cheap
+workdir: "."
+nodes:
+  - id: write-tests
+    brief: >
+      Write test/duration.test.js (node:test + node:assert) that imports
+      parseDuration from ../src/duration.js and encodes this SPEC: parseDuration
+      takes a string of one or more `<number><unit>` segments with units h
+      (hours=3600s), m (minutes=60s), s (seconds=1s). Examples: '1h30m' -> 5400,
+      '90m' -> 5400, '2h' -> 7200, '45s' -> 45, '1h1m1s' -> 3661. Whitespace is
+      not allowed. An empty string or an invalid format throws. Include several
+      varied example cases AND at least one throw case (use assert.throws on an
+      invalid input such as '' or 'abc'). The implementation does NOT exist yet
+      (the stub throws), so the tests MUST call parseDuration and assert real
+      values — the gate requires the suite to FAIL against the current stub (a
+      vacuous test that passes is rejected).
+    context_globs: ["src/**", "SPEC.md"]
+    blast_radius: ["test/**"]
+    done_check: "node --check test/duration.test.js && grep -q parseDuration test/duration.test.js && ! node --test test/duration.test.js"
+    budget_usd: 0.60
+
+  - id: implement
+    brief: >
+      Implement parseDuration(s) in src/duration.js per the SPEC (read SPEC.md):
+      parse one or more `<number><unit>` segments (h=3600s, m=60s, s=1s) and
+      return the total seconds as an integer. Reject whitespace, empty strings,
+      and any invalid format by throwing. Do NOT edit the test. Run
+      `node --test test/duration.test.js` to confirm the suite passes.
+    deps: [write-tests]
+    context_globs: ["src/**", "test/**", "SPEC.md"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/duration.test.js && git diff --quiet HEAD -- test/duration.test.js"
+    budget_usd: 0.60

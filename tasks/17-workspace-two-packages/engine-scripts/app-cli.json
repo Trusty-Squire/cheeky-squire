@@ -1,0 +1,16 @@
+{
+  "steps": [
+    { "text": "Implementing run(argv) in app cli." },
+    { "tool": "read", "args": { "path": "packages/app/src/greeting.js" } },
+    {
+      "tool": "write",
+      "args": {
+        "path": "packages/app/src/cli.js",
+        "content": "const { greet } = require(\"./greeting.js\");\nconst { bound } = require(\"./bound.js\");\nfunction run(argv) {\n  let name = \"\";\n  let score = 0;\n  for (let i = 0; i < argv.length; i++) {\n    if (argv[i] === \"--name\") name = argv[++i];\n    else if (argv[i] === \"--score\") score = Number(argv[++i]);\n  }\n  return `${greet(name).title} scored ${bound(score)}`;\n}\nmodule.exports = { run };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {run}=require('./packages/app/src/cli.js'); process.exit(run(['--name','ada lovelace','--score','42'])==='Ada Lovelace scored 42' && run(['--name','grace hopper','--score','250'])==='Grace Hopper scored 100'?0:1)\"" } },
+    { "usage": { "in": 1400, "out": 230 } },
+    { "done": "Implemented run(argv) parsing --name/--score, composing greet().title and bound(score)." }
+  ]
+}

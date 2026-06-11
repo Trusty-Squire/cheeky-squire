@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Writing packages/core/test/numbers.test.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "packages/core/test/numbers.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { clamp } = require(\"../src/numbers.js\");\n\ntest(\"clamp constrains to [lo, hi]\", () => {\n  assert.strictEqual(clamp(-5, 0, 100), 0);\n  assert.strictEqual(clamp(250, 0, 100), 100);\n  assert.strictEqual(clamp(42, 0, 100), 42);\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test packages/core/test/numbers.test.js" } },
+    { "usage": { "in": 1100, "out": 170 } },
+    { "done": "Wrote numbers.test.js covering below-lo, above-hi, and in-range; mutation guard passes." }
+  ]
+}

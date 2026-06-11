@@ -1,0 +1,33 @@
+goal: >
+  Implement roundHalfEven(x), which rounds a number to the nearest integer.
+  The exact rule for halves is fixed by SPEC.md — read it; do not guess.
+budget_usd: 1.20
+chain: cheap
+workdir: "."
+nodes:
+  - id: implement
+    brief: >
+      Implement roundHalfEven(x) in src/round.js so it rounds x to the nearest
+      integer. READ SPEC.md for the rule that applies when the fractional part
+      is exactly 0.5 — the obvious `Math.round` (round-half-up) reading is
+      WRONG here; SPEC.md mandates round-half-to-even (banker's rounding), so
+      halves go to the nearest EVEN integer (0.5->0, 2.5->2) and non-halves
+      round normally. Keep the module.exports. Verify via the done_check.
+    context_globs: ["src/**", "SPEC.md"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {roundHalfEven:r}=require('./src/round.js'); process.exit( r(0.5)===0 && r(1.5)===2 && r(2.5)===2 && r(3.5)===4 && r(-0.5)===0 && r(2.4)===2 && r(2.6)===3 ? 0 : 1)\""
+    budget_usd: 0.60
+
+  - id: lock-tests
+    brief: >
+      Write test/round.test.js using node:test and node:assert that imports
+      roundHalfEven from ../src/round.js and pins the SPEC's round-half-to-even
+      behavior. Include the DISTINGUISHING half cases that a Math.round
+      (half-up) implementation would get wrong (e.g. 0.5->0, 2.5->2) plus a
+      couple of non-half cases (2.4->2, 2.6->3). Run
+      `node --test test/round.test.js`.
+    deps: [implement]
+    context_globs: ["src/**", "test/**", "SPEC.md"]
+    blast_radius: ["test/**"]
+    done_check: "grep -q roundHalfEven test/round.test.js && bash checks/mutation-guard.sh src/round.js checks/round.halfup.mutant.js 'node --test test/round.test.js'"
+    budget_usd: 0.60

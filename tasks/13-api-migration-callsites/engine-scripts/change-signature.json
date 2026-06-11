@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Changing src/logger.js to the two-argument log(level, message) signature." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/logger.js",
+        "content": "// Logging API. log(level, message) -> `[${level.toUpperCase()}] ${message}`.\nfunction log(level, message) {\n  return `[${level.toUpperCase()}] ${message}`;\n}\nmodule.exports = { log };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {log}=require('./src/logger.js'); process.exit(log('info','hi')==='[INFO] hi' && log('warn','yo')==='[WARN] yo' ? 0 : 1)\"" } },
+    { "usage": { "in": 900, "out": 120 } },
+    { "done": "src/logger.js now exports log(level, message) returning `[LEVEL] message`; verified with varied inputs." }
+  ]
+}

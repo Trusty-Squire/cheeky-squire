@@ -1,0 +1,120 @@
+goal: >
+  Build a two-package CommonJS workspace (packages/core and packages/app) where
+  app consumes core through relative requires, across ten dependency-ordered
+  nodes. The cross-package contract must hold end-to-end.
+budget_usd: 2.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: core-slugify
+    brief: >
+      In packages/core/src/strings.js implement slugify(s): lowercase the input,
+      convert runs of spaces and underscores to single '-', and strip any
+      character that is not [a-z0-9-]. Keep titleCase exported (it stays a stub
+      for now). Verify with the done_check.
+    context_globs: ["packages/core/src/**"]
+    blast_radius: ["packages/core/src/**"]
+    done_check: "node -e \"const s=require('./packages/core/src/strings.js'); process.exit(s.slugify('Hello World')==='hello-world' && s.slugify('A_B c')==='a-b-c' ? 0 : 1)\""
+    budget_usd: 0.25
+
+  - id: core-titlecase
+    brief: >
+      In packages/core/src/strings.js implement titleCase(s): split on
+      whitespace and capitalize the first letter of each word, lowercasing the
+      rest. Keep slugify unchanged and exported. Verify with the done_check.
+    deps: [core-slugify]
+    context_globs: ["packages/core/src/**"]
+    blast_radius: ["packages/core/src/**"]
+    done_check: "node -e \"const s=require('./packages/core/src/strings.js'); process.exit(s.titleCase('ada lovelace')==='Ada Lovelace' && s.titleCase('GRACE hopper')==='Grace Hopper' && s.slugify('A_B c')==='a-b-c' ? 0 : 1)\""
+    budget_usd: 0.25
+
+  - id: core-strings-test
+    brief: >
+      Write packages/core/test/strings.test.js using node:test and node:assert.
+      Import slugify and titleCase from ../src/strings.js and assert several
+      VARIED cases for each (spaces, underscores, stripped punctuation, mixed
+      case). Run `node --test packages/core/test/strings.test.js`.
+    deps: [core-titlecase]
+    context_globs: ["packages/core/src/**", "packages/core/test/**"]
+    blast_radius: ["packages/core/test/**"]
+    done_check: "grep -q slugify packages/core/test/strings.test.js && bash checks/mutation-guard.sh packages/core/src/strings.js checks/strings.mutant.js 'node --test packages/core/test/strings.test.js'"
+    budget_usd: 0.25
+
+  - id: core-clamp
+    brief: >
+      In packages/core/src/numbers.js implement clamp(n, lo, hi): return lo when
+      n < lo, hi when n > hi, otherwise n. Verify with the done_check.
+    deps: [core-slugify]
+    context_globs: ["packages/core/src/**"]
+    blast_radius: ["packages/core/src/**"]
+    done_check: "node -e \"const {clamp}=require('./packages/core/src/numbers.js'); process.exit(clamp(-5,0,100)===0 && clamp(250,0,100)===100 && clamp(42,0,100)===42 ? 0 : 1)\""
+    budget_usd: 0.25
+
+  - id: core-numbers-test
+    brief: >
+      Write packages/core/test/numbers.test.js using node:test and node:assert.
+      Import clamp from ../src/numbers.js and assert VARIED cases: below lo, above
+      hi, and in range. Run `node --test packages/core/test/numbers.test.js`.
+    deps: [core-clamp]
+    context_globs: ["packages/core/src/**", "packages/core/test/**"]
+    blast_radius: ["packages/core/test/**"]
+    done_check: "grep -q clamp packages/core/test/numbers.test.js && bash checks/mutation-guard.sh packages/core/src/numbers.js checks/numbers.mutant.js 'node --test packages/core/test/numbers.test.js'"
+    budget_usd: 0.25
+
+  - id: app-greeting
+    brief: >
+      In packages/app/src/greeting.js implement greet(name) returning
+      { slug: slugify(name), title: titleCase(name) }. Consume core via the
+      RELATIVE require require("../../core/src/strings.js"). Verify with the
+      done_check.
+    deps: [core-strings-test]
+    context_globs: ["packages/app/src/**", "packages/core/src/**"]
+    blast_radius: ["packages/app/src/**"]
+    done_check: "node -e \"const a=require('./packages/app/src/greeting.js'); const assert=require('node:assert'); assert.deepStrictEqual(a.greet('ada lovelace'),{slug:'ada-lovelace',title:'Ada Lovelace'}); assert.deepStrictEqual(a.greet('Grace HOPPER'),{slug:'grace-hopper',title:'Grace Hopper'});\""
+    budget_usd: 0.25
+
+  - id: app-bound
+    brief: >
+      In packages/app/src/bound.js implement bound(n) = clamp(n, 0, 100).
+      Consume core via the RELATIVE require require("../../core/src/numbers.js").
+      Verify with the done_check.
+    deps: [core-numbers-test]
+    context_globs: ["packages/app/src/**", "packages/core/src/**"]
+    blast_radius: ["packages/app/src/**"]
+    done_check: "node -e \"const {bound}=require('./packages/app/src/bound.js'); process.exit(bound(-5)===0 && bound(250)===100 && bound(42)===42 ? 0 : 1)\""
+    budget_usd: 0.25
+
+  - id: app-cli
+    brief: >
+      In packages/app/src/cli.js implement run(argv) that parses `--name X` and
+      `--score N` from argv and returns `${greet(X).title} scored ${bound(N)}`.
+      Use ./greeting.js and ./bound.js. Verify with the done_check.
+    deps: [app-greeting, app-bound]
+    context_globs: ["packages/app/src/**"]
+    blast_radius: ["packages/app/src/**"]
+    done_check: "node -e \"const {run}=require('./packages/app/src/cli.js'); process.exit(run(['--name','ada lovelace','--score','42'])==='Ada Lovelace scored 42' && run(['--name','grace hopper','--score','250'])==='Grace Hopper scored 100' ? 0 : 1)\""
+    budget_usd: 0.25
+
+  - id: app-test
+    brief: >
+      Write packages/app/test/app.test.js using node:test and node:assert,
+      covering greet (../src/greeting.js), bound (../src/bound.js), and run
+      (../src/cli.js) with VARIED inputs. Assert the full cli output string.
+      Run `node --test packages/app/test/app.test.js`.
+    deps: [app-cli]
+    context_globs: ["packages/app/src/**", "packages/app/test/**"]
+    blast_radius: ["packages/app/test/**"]
+    done_check: "grep -q run packages/app/test/app.test.js && bash checks/mutation-guard.sh packages/app/src/cli.js checks/cli.mutant.js 'node --test packages/app/test/app.test.js'"
+    budget_usd: 0.25
+
+  - id: integration
+    brief: >
+      Write packages/app/test/integration.test.js asserting the end-to-end
+      cross-package run, e.g. run(['--name','grace hopper','--score','150'])
+      === 'Grace Hopper scored 100'. Do NOT modify app.test.js. Run
+      `node --test packages/app/test/integration.test.js`.
+    deps: [app-test]
+    context_globs: ["packages/app/src/**", "packages/app/test/**"]
+    blast_radius: ["packages/app/test/**"]
+    done_check: "node --test packages/app/test/integration.test.js && git diff --quiet HEAD -- packages/app/test/app.test.js"
+    budget_usd: 0.25

@@ -1,0 +1,9 @@
+{
+  "steps": [
+    { "text": "Running the full suite against the migrated tree; not touching test/api.test.js." },
+    { "tool": "bash", "args": { "command": "node --test test/api.test.js" } },
+    { "tool": "bash", "args": { "command": "git diff --quiet HEAD -- test/api.test.js && echo 'test unchanged'" } },
+    { "usage": { "in": 800, "out": 90 } },
+    { "done": "node --test test/api.test.js passes and test/api.test.js is byte-identical to HEAD (diff-guard satisfied)." }
+  ]
+}

@@ -1,0 +1,30 @@
+goal: "Localize and fix a bug hidden among ~50 util modules, then pin it with a regression test."
+budget_usd: 1.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: fix-bug
+    brief: >
+      test/pipeline.test.js fails. The pipeline in src/pipeline.js chains five
+      util modules out of ~50 under src/util/ (u00.js..u49.js); the other 45 are
+      inert pass-throughs. Exactly ONE of the five active stages (u07, u13, u21,
+      u34, u42) is wrong. Read src/pipeline.js to see which modules and order are
+      active, read those stage files, work out which one breaks the expected
+      values, and fix ONLY that module. Do not edit the test. Run
+      `node --test test/pipeline.test.js`.
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/pipeline.test.js && git diff --quiet HEAD -- test/pipeline.test.js"
+    budget_usd: 0.90
+
+  - id: regression
+    brief: >
+      Add test/regression.test.js that imports the u21 stage directly from
+      ../src/util/u21.js and pins its behavior: u21(5) === 4, u21(1) === 0,
+      u21(-3) === -4. Use node:test and node:assert. Run
+      `node --test test/regression.test.js`.
+    deps: [fix-bug]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["test/**"]
+    done_check: "grep -q u21 test/regression.test.js && bash checks/mutation-guard.sh src/util/u21.js checks/u21.mutant.js 'node --test test/regression.test.js'"
+    budget_usd: 0.60

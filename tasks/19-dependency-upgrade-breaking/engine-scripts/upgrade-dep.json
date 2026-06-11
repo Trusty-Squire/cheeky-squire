@@ -1,0 +1,22 @@
+{
+  "steps": [
+    { "text": "Upgrading the vendored jsonfmt dependency from v1 to v2 (breaking change) and bumping deps.lock.json." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "vendor/jsonfmt/index.js",
+        "content": "// Vendored dependency \"jsonfmt\" — v2 API (UPGRADE TARGET).\n// BREAKING CHANGE: format now requires a second `opts` argument with a\n// boolean `pretty`. Calling format(obj) the old (single-arg) way throws.\nmodule.exports = {\n  version: '2.0.0',\n  format: (obj, opts) => {\n    if (!opts || typeof opts.pretty !== 'boolean') {\n      throw new Error('opts.pretty required');\n    }\n    return JSON.stringify(obj, null, opts.pretty ? 2 : 0);\n  },\n};\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "deps.lock.json",
+        "content": "{ \"jsonfmt\": \"2.0.0\" }\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "grep -q '\"jsonfmt\": \"2.0.0\"' deps.lock.json && ! grep -q '1.0.0' deps.lock.json && node -e \"const j=require('./vendor/jsonfmt'); process.exit(j.version==='2.0.0' && j.format({x:1},{pretty:false})==='{\\\"x\\\":1}' ? 0 : 1)\"" } },
+    { "usage": { "in": 1100, "out": 220 } },
+    { "done": "vendor/jsonfmt/index.js now ships v2 (breaking format(obj, opts)); deps.lock.json bumped to 2.0.0." }
+  ]
+}

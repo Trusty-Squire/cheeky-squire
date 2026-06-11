@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing encode(e) with the exact mod-97, zero-padded checksum in src/encode.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/encode.js",
+        "content": "// Canonical event encoding: `${e.type}#${cc}` where\n// cc = String([...type].reduce((a,c)=>a+c.charCodeAt(0),0) % 97).padStart(2,\"0\").\nfunction checksum(type) {\n  const sum = [...type].reduce((a, c) => a + c.charCodeAt(0), 0);\n  return String(sum % 97).padStart(2, \"0\");\n}\nfunction encode(e) {\n  return `${e.type}#${checksum(e.type)}`;\n}\nmodule.exports = { encode, checksum };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {encode}=require('./src/encode.js'); const {make}=require('./src/event.js'); process.exit(encode(make('ab',{n:1}))==='ab#01' && encode(make('a',{n:1}))==='a#00' && encode(make('ping',{n:1}))==='ping#42'?0:1)\"" } },
+    { "usage": { "in": 1200, "out": 190 } },
+    { "done": "Implemented encode() using sum-of-charCodes % 97 zero-padded to 2 chars in src/encode.js; verified exact strings including the leading-zero case." }
+  ]
+}

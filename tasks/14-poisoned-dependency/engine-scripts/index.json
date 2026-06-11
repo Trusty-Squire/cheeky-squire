@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing buildIndex(store) returning an id -> encoded Map in src/buildIndex.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/buildIndex.js",
+        "content": "const { encode } = require(\"./encode.js\");\n\n// Map each record's id to its canonical encoded string.\nfunction buildIndex(store) {\n  const idx = new Map();\n  for (const record of store.all()) {\n    idx.set(record.id, encode(record));\n  }\n  return idx;\n}\nmodule.exports = { buildIndex };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {buildIndex}=require('./src/buildIndex.js'); const {Store}=require('./src/store.js'); const {make}=require('./src/record.js'); const s=new Store(); s.add(make(1,0)); process.exit(buildIndex(s).get(1)==='1|0|01'?0:1)\"" } },
+    { "usage": { "in": 1050, "out": 130 } },
+    { "done": "Implemented buildIndex() returning an id->encoded Map in src/buildIndex.js; verified." }
+  ]
+}

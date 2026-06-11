@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing register(h)/all() with the kebab-type + function guard in src/registry.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/registry.js",
+        "content": "// Handler registry. register(h) enforces the handler convention:\n//   h.type is kebab-case (/^[a-z]+(-[a-z]+)*$/) AND typeof h.handle==='function'.\nconst TYPE_RE = /^[a-z]+(-[a-z]+)*$/;\nconst handlers = [];\nfunction register(h) {\n  if (!h || !TYPE_RE.test(h.type) || typeof h.handle !== \"function\") {\n    throw new Error(`invalid handler: ${h && h.type}`);\n  }\n  handlers.push(h);\n  return h;\n}\nfunction all() {\n  return handlers;\n}\nmodule.exports = { register, all };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const r=require('./src/registry.js'); r.register({type:'ok',handle(){return 'ok'}}); let bad=0; try{r.register({type:'Bad_Type',handle(){}});bad++}catch{} process.exit(r.all().length===1&&bad===0?0:1)\"" } },
+    { "usage": { "in": 1100, "out": 200 } },
+    { "done": "Implemented src/registry.js: register() throws unless type is kebab-case and handle is a function; all() returns handlers in order. Verified." }
+  ]
+}

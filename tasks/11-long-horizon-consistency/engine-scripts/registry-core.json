@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing the plugin registry: register() validates kebab-case name + function handle, all() returns the list." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/registry.js",
+        "content": "// Plugin registry.\n//\n// Convention enforced here: register(h) throws unless h.name is kebab-case\n// (/^[a-z]+(-[a-z]+)*$/) and typeof h.handle === 'function'. all() returns the\n// registered handlers in registration order.\nconst NAME_RE = /^[a-z]+(-[a-z]+)*$/;\nconst handlers = [];\nfunction register(h) {\n  if (!h || !NAME_RE.test(h.name) || typeof h.handle !== \"function\") {\n    throw new Error(`invalid handler: ${h && h.name}`);\n  }\n  handlers.push(h);\n  return h;\n}\nfunction all() {\n  return handlers;\n}\nmodule.exports = { register, all };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const r=require('./src/registry.js'); r.register({name:'ok',handle(){return 'ok'}}); console.log(r.all().length)\"" } },
+    { "usage": { "in": 1200, "out": 220 } },
+    { "done": "Implemented src/registry.js: register() throws on non-kebab name or missing handle, all() returns the list in order." }
+  ]
+}

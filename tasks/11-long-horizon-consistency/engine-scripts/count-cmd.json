@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Adding count(): number of registered handlers, from the registry." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/count.js",
+        "content": "// count(): number of registered handlers.\nconst { all } = require(\"./index.js\");\nfunction count() {\n  return all().length;\n}\nmodule.exports = { count };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {count}=require('./src/count.js'); console.log(count())\"" } },
+    { "usage": { "in": 1200, "out": 150 } },
+    { "done": "Added src/count.js: count() returns all().length from the registry." }
+  ]
+}

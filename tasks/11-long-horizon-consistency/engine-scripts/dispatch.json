@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Adding dispatch(name, x): look up the registered handler and call its handle, throwing on unknown." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/dispatch.js",
+        "content": "// dispatch(name, x): find the registered handler whose name === name and call\n// its handle(x). Throws if no handler matches.\nconst { all } = require(\"./index.js\");\nfunction dispatch(name, x) {\n  const h = all().find((handler) => handler.name === name);\n  if (!h) {\n    throw new Error(`unknown handler: ${name}`);\n  }\n  return h.handle(x);\n}\nmodule.exports = { dispatch };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {dispatch}=require('./src/dispatch.js'); console.log(dispatch('alpha','q'))\"" } },
+    { "usage": { "in": 1300, "out": 200 } },
+    { "done": "Added src/dispatch.js: dispatch(name,x) finds the handler and returns handle(x); throws on unknown names." }
+  ]
+}

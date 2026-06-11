@@ -1,0 +1,216 @@
+goal: >
+  Build a small event-processing system over a long 15-node chain that combines
+  three failure-prone patterns. (A) A canonical ENCODING with a 2-char mod-97,
+  zero-padded checksum is defined once (the `encode` node) and consumed by every
+  downstream stage — a subtle wrong checksum here poisons the tail. (B) A HANDLER
+  CONVENTION is established early (the `first-handler` node) and re-checked by a
+  whole-registry test on every later handler node, so any drift fails the chain.
+  (C) The emit() API is migrated from emit(type, payload) to emit(event) across
+  six call sites in src/wire/*.js, gated by a compile check and a completeness
+  grep for leftover two-arg calls.
+budget_usd: 3.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: event-make
+    brief: >
+      Implement make(type, payload) in src/event.js. It returns { type, payload }.
+      It MUST throw unless type is a non-empty string AND payload is a non-null
+      object (typeof payload === 'object' && payload !== null). Export make. Verify
+      with the done_check.
+    context_globs: ["src/event.js"]
+    blast_radius: ["src/event.js"]
+    done_check: "node -e \"const {make}=require('./src/event.js'); const e=make('ping',{n:5}); const ok=e.type==='ping'&&e.payload.n===5; let t1=false; try{make('',{})}catch{t1=true} let t2=false; try{make('ping',null)}catch{t2=true} let t3=false; try{make('ping',7)}catch{t3=true} process.exit(ok&&t1&&t2&&t3?0:1)\""
+    budget_usd: 0.25
+
+  - id: store
+    brief: >
+      Implement a Store in src/store.js with add(event) and all(). all() returns
+      the added events in insertion order. Export Store (a class or factory
+      exposing add/all). Verify with the done_check.
+    deps: [event-make]
+    context_globs: ["src/store.js", "src/event.js"]
+    blast_radius: ["src/store.js"]
+    done_check: "node -e \"const {Store}=require('./src/store.js'); const {make}=require('./src/event.js'); const s=new Store(); s.add(make('ping',{n:1})); s.add(make('pong',{n:2})); const a=s.all(); process.exit(a.length===2&&a[0].type==='ping'&&a[1].type==='pong'?0:1)\""
+    budget_usd: 0.20
+
+  - id: encode
+    brief: >
+      Implement encode(e) in src/encode.js. It MUST return the string
+      `${e.type}#${cc}` where the 2-char checksum cc is
+      String([...e.type].reduce((a,c)=>a+c.charCodeAt(0),0) % 97).padStart(2,'0').
+      The modulus is 97 (NOT 100), and cc is ALWAYS zero-padded to exactly two
+      characters. Export encode. Verify with the done_check (it asserts exact
+      strings, including a case that needs the leading zero).
+    deps: [store]
+    context_globs: ["src/encode.js", "src/event.js"]
+    blast_radius: ["src/encode.js"]
+    done_check: "node -e \"const {encode}=require('./src/encode.js'); const {make}=require('./src/event.js'); process.exit( encode(make('ping',{n:1}))==='ping#42' && encode(make('tick',{n:1}))==='tick#39' && encode(make('ab',{n:1}))==='ab#01' && encode(make('a',{n:1}))==='a#00' ? 0 : 1)\""
+    budget_usd: 0.40
+
+  - id: encode-all
+    brief: >
+      Implement encodeAll(store) in src/encodeAll.js. It returns
+      store.all().map(encode) using encode from ./encode.js. Export encodeAll.
+      Verify with the done_check (it asserts exact strings).
+    deps: [encode]
+    context_globs: ["src/encodeAll.js", "src/encode.js", "src/store.js", "src/event.js"]
+    blast_radius: ["src/encodeAll.js"]
+    done_check: "node -e \"const {encodeAll}=require('./src/encodeAll.js'); const {Store}=require('./src/store.js'); const {make}=require('./src/event.js'); const s=new Store(); s.add(make('ping',{n:1})); s.add(make('ab',{n:2})); const out=encodeAll(s); process.exit(out.length===2&&out[0]==='ping#42'&&out[1]==='ab#01'?0:1)\""
+    budget_usd: 0.25
+
+  - id: verify
+    brief: >
+      Implement verify(encoded) in src/verify.js. Split encoded on '#' into type
+      and cc. Recompute
+      String([...type].reduce((a,c)=>a+c.charCodeAt(0),0) % 97).padStart(2,'0')
+      and return true iff it equals the trailing cc. Export verify. The done_check
+      builds a store, encodes it, asserts verify is true for every produced string
+      AND false for a tampered checksum.
+    deps: [encode-all]
+    context_globs: ["src/verify.js", "src/encodeAll.js", "src/encode.js", "src/store.js", "src/event.js"]
+    blast_radius: ["src/verify.js"]
+    done_check: "node -e \"const {verify}=require('./src/verify.js'); const {encodeAll}=require('./src/encodeAll.js'); const {Store}=require('./src/store.js'); const {make}=require('./src/event.js'); const s=new Store(); s.add(make('ping',{n:1})); s.add(make('ab',{n:2})); s.add(make('a',{n:3})); const all=encodeAll(s); const good=all.every(verify); const tampered=all[1].split('#')[0]+'#99'; const bad=verify(tampered)===false; process.exit(good&&bad?0:1)\""
+    budget_usd: 0.25
+
+  - id: registry-core
+    brief: >
+      Implement src/registry.js. register(h) MUST throw unless h.type matches
+      /^[a-z]+(-[a-z]+)*$/ (kebab-case) AND typeof h.handle === 'function';
+      otherwise it appends h to an internal list. all() returns that list (the
+      registered handlers, in registration order). Do not create any handler
+      files here. Verify with the done_check.
+    deps: [event-make]
+    context_globs: ["src/registry.js"]
+    blast_radius: ["src/registry.js"]
+    done_check: "node -e \"const r=require('./src/registry.js'); r.register({type:'ok',handle(){return 'ok'}}); const list=r.all(); let bad=0; try{r.register({type:'Bad_Type',handle(){}});bad++}catch(e){} try{r.register({type:'no-handle'});bad++}catch(e){} process.exit(list.length===1 && list[0].type==='ok' && bad===0 ? 0 : 1)\""
+    budget_usd: 0.30
+
+  - id: first-handler
+    brief: >
+      ESTABLISH THE CONVENTION. (1) Create src/handlers/ping.js exporting
+      { type: 'ping', handle: (e) => `ping:${e.payload.n}` }. (2) Create
+      src/index.js that requires the registry and the ping handler, registers
+      ping, and re-exports the registry's register and all (so
+      require('./src/index.js') exposes all()). (3) Create test/convention.test.js
+      (node:test + node:assert) that requires src/index.js and asserts, for EVERY
+      handler h in all(), that /^[a-z]+(-[a-z]+)*$/.test(h.type) is true AND
+      h.handle({payload:{n:5}}) === `${h.type}:5`. Future handler nodes are checked
+      against this exact test, so make it loop over all() rather than naming ping.
+    deps: [registry-core]
+    context_globs: ["src/registry.js", "src/index.js", "src/handlers/ping.js", "test/convention.test.js"]
+    blast_radius: ["src/**", "test/**"]
+    done_check: "node --test test/convention.test.js && node -e \"const r=require('./src/index.js'); const p=r.all().find(h=>h.type==='ping'); process.exit(p && p.handle({payload:{n:7}})==='ping:7' && p.handle({payload:{n:3}})==='ping:3' ? 0 : 1)\""
+    budget_usd: 0.35
+
+  - id: emit-v1
+    brief: >
+      Implement src/emit.js exporting emit(type, payload) (the v1 two-argument
+      API). It makes an event via src/event.js make(type, payload), stores it in a
+      shared Store, finds the registered handler (via src/index.js all()) whose
+      type === type, calls handler.handle(event) and returns the result. If no
+      handler matches, throw. Verify with the done_check.
+    deps: [first-handler, store]
+    context_globs: ["src/emit.js", "src/event.js", "src/store.js", "src/registry.js", "src/index.js", "src/handlers/ping.js"]
+    blast_radius: ["src/emit.js"]
+    done_check: "node -e \"const {emit}=require('./src/emit.js'); let threw=false; try{emit('nope',{n:1})}catch{threw=true} process.exit(emit('ping',{n:4})==='ping:4' && emit('ping',{n:9})==='ping:9' && threw ? 0 : 1)\""
+    budget_usd: 0.30
+
+  - id: wire-a
+    brief: >
+      Implement src/wire/a.js. Require emit from ../emit.js. Export a(x) and b(x).
+      a(x) calls emit('ping', { n: x }) at ONE call site and returns its result.
+      b(x) calls emit('ping', { n: x * 2 }) at a SECOND call site and returns its
+      result. Two two-argument emit call sites total. Verify with the done_check.
+    deps: [emit-v1]
+    context_globs: ["src/wire/a.js", "src/emit.js"]
+    blast_radius: ["src/wire/a.js"]
+    done_check: "node -e \"const a=require('./src/wire/a.js'); process.exit(a.a(5)==='ping:5' && a.b(5)==='ping:10' && a.a(2)==='ping:2' ? 0 : 1)\""
+    budget_usd: 0.20
+
+  - id: wire-b
+    brief: >
+      Implement src/wire/b.js. Require emit from ../emit.js. Export a(x) and b(x).
+      a(x) calls emit('ping', { n: x + 1 }) at ONE call site and returns its
+      result. b(x) calls emit('ping', { n: x + 10 }) at a SECOND call site and
+      returns its result. Two two-argument emit call sites total. Verify with the
+      done_check.
+    deps: [wire-a]
+    context_globs: ["src/wire/b.js", "src/wire/a.js", "src/emit.js"]
+    blast_radius: ["src/wire/b.js"]
+    done_check: "node -e \"const b=require('./src/wire/b.js'); process.exit(b.a(5)==='ping:6' && b.b(5)==='ping:15' && b.a(0)==='ping:1' ? 0 : 1)\""
+    budget_usd: 0.20
+
+  - id: wire-c
+    brief: >
+      Implement src/wire/c.js. Require emit from ../emit.js. Export a(x) and b(x).
+      a(x) calls emit('ping', { n: x * 3 }) at ONE call site and returns its
+      result. b(x) calls emit('ping', { n: x - 1 }) at a SECOND call site and
+      returns its result. Two two-argument emit call sites total. Verify with the
+      done_check.
+    deps: [wire-b]
+    context_globs: ["src/wire/c.js", "src/wire/b.js", "src/emit.js"]
+    blast_radius: ["src/wire/c.js"]
+    done_check: "node -e \"const c=require('./src/wire/c.js'); process.exit(c.a(4)==='ping:12' && c.b(4)==='ping:3' && c.a(1)==='ping:3' ? 0 : 1)\""
+    budget_usd: 0.20
+
+  - id: emit-migrate
+    brief: >
+      BREAKING API MIGRATION. Change emit in src/emit.js from emit(type, payload)
+      to emit(event) taking a SINGLE event object { type, payload }; it stores the
+      event and dispatches to the matching handler exactly as before. Then update
+      ALL call sites in src/wire/a.js, src/wire/b.js, src/wire/c.js to pass a
+      single object, e.g. emit({ type: 'ping', payload: { n: x } }), preserving
+      each function's existing n expression. After this, NO two-argument emit(...)
+      call may remain under src/wire. The exported outputs must be unchanged. The
+      done_check compiles every src file, exercises the wire outputs, and asserts
+      zero leftover two-arg emit calls.
+    deps: [wire-a, wire-b, wire-c]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "for f in $(find src -name '*.js'); do node --check \"$f\" || exit 1; done && node -e \"const a=require('./src/wire/a.js'); const b=require('./src/wire/b.js'); const c=require('./src/wire/c.js'); const {emit}=require('./src/emit.js'); process.exit(a.a(5)==='ping:5' && a.b(5)==='ping:10' && b.a(5)==='ping:6' && c.a(4)==='ping:12' && c.b(4)==='ping:3' && emit({type:'ping',payload:{n:8}})==='ping:8' ? 0 : 1)\" && ! grep -rEn \"emit\\(['\\\"]\" src/wire"
+    budget_usd: 0.45
+
+  - id: handler-pong
+    brief: >
+      Add a new handler following the convention EXACTLY. Read src/handlers/ping.js
+      and test/convention.test.js first. Create src/handlers/pong.js exporting
+      { type: 'pong', handle: (e) => `pong:${e.payload.n}` } (type must be
+      kebab-case and equal the filename stem; handle(e) must return
+      `${type}:${e.payload.n}`). Then edit src/index.js to require and register
+      pong. Do NOT edit test/convention.test.js. Run the convention test — it
+      re-checks ALL handlers.
+    deps: [emit-migrate]
+    context_globs: ["src/registry.js", "src/index.js", "src/handlers/ping.js", "test/convention.test.js"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/convention.test.js && git diff --quiet HEAD -- test/convention.test.js && node -e \"const {emit}=require('./src/emit.js'); process.exit(emit({type:'pong',payload:{n:2}})==='pong:2' && emit({type:'pong',payload:{n:6}})==='pong:6' ? 0 : 1)\""
+    budget_usd: 0.20
+
+  - id: handler-tick
+    brief: >
+      Add a new handler following the convention EXACTLY. Read src/handlers/ping.js
+      and test/convention.test.js first. Create src/handlers/tick.js exporting
+      { type: 'tick', handle: (e) => `tick:${e.payload.n}` }. Then edit
+      src/index.js to require and register tick. Do NOT edit
+      test/convention.test.js. Run the convention test — it re-checks ALL handlers.
+    deps: [handler-pong]
+    context_globs: ["src/registry.js", "src/index.js", "src/handlers/ping.js", "test/convention.test.js"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/convention.test.js && git diff --quiet HEAD -- test/convention.test.js && node -e \"const {emit}=require('./src/emit.js'); process.exit(emit({type:'tick',payload:{n:3}})==='tick:3' && emit({type:'tick',payload:{n:8}})==='tick:8' ? 0 : 1)\""
+    budget_usd: 0.20
+
+  - id: integration
+    brief: >
+      Create test/integration.test.js (node:test + node:assert). End-to-end: build
+      a Store, make several events through src/event.js, emit them through the
+      migrated emit({type,payload}) API for ping/pong/tick, encode them with
+      encode and assert verify is true for each produced string, and assert EVERY
+      registered handler in require('../src/index.js').all() has a kebab-case type
+      and that handle({payload:{n:5}}) === `${type}:5`. Do NOT edit
+      test/convention.test.js. The done_check runs the integration test and the
+      frozen-convention diff guard.
+    deps: [verify, handler-pong, handler-tick]
+    context_globs: ["src/**", "test/convention.test.js", "test/integration.test.js"]
+    blast_radius: ["test/**"]
+    done_check: "node --test test/integration.test.js && git diff --quiet HEAD -- test/convention.test.js"
+    budget_usd: 0.25

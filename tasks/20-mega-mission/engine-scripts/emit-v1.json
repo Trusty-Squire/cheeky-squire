@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing the v1 two-argument emit(type, payload) API in src/emit.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/emit.js",
+        "content": "// Emit API v1: emit(type, payload).\n// Makes an event, stores it, dispatches to the matching registered handler.\nconst { make } = require(\"./event.js\");\nconst { Store } = require(\"./store.js\");\nconst { all } = require(\"./index.js\");\n\nconst store = new Store();\n\nfunction emit(type, payload) {\n  const event = make(type, payload);\n  store.add(event);\n  const handler = all().find((h) => h.type === type);\n  if (!handler) {\n    throw new Error(`no handler for type: ${type}`);\n  }\n  return handler.handle(event);\n}\n\nmodule.exports = { emit, store };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {emit}=require('./src/emit.js'); let t=false; try{emit('nope',{n:1})}catch{t=true} process.exit(emit('ping',{n:4})==='ping:4'&&t?0:1)\"" } },
+    { "usage": { "in": 1300, "out": 230 } },
+    { "done": "Implemented emit(type,payload) in src/emit.js: makes + stores the event, dispatches to the matching handler, throws on unknown type. Verified." }
+  ]
+}

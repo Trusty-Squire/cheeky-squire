@@ -1,0 +1,117 @@
+goal: >
+  Build a small plugin registry and a family of handlers over a long, strictly
+  chained sequence of nodes. A CONVENTION is established early (by first-handler)
+  and every later handler node must honor it EXACTLY: a handler is a module
+  src/handlers/<name>.js exporting { name, handle } where name is kebab-case and
+  equals the filename stem, and handle(x) returns the string `${name}:${x}`.
+  src/index.js requires every handler and registers it via the registry. The
+  convention test re-checks ALL handlers on every node, so any drift fails the
+  chain.
+budget_usd: 2.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: registry-core
+    brief: >
+      Implement src/registry.js. register(h) MUST throw unless h.name matches
+      /^[a-z]+(-[a-z]+)*$/ (kebab-case) AND typeof h.handle === 'function';
+      otherwise it appends h to an internal list. all() returns that list (the
+      registered handlers, in registration order). Do not create any handler
+      files here. Verify with the done_check.
+    context_globs: ["src/registry.js"]
+    blast_radius: ["src/registry.js"]
+    done_check: "node -e \"const r=require('./src/registry.js'); r.register({name:'ok',handle(){return 'ok'}}); const list=r.all(); let bad=0; try{r.register({name:'Bad_Name',handle(){}});bad++}catch(e){} try{r.register({name:'no-handle'});bad++}catch(e){} process.exit(list.length===1 && list[0].name==='ok' && bad===0 ? 0 : 1)\""
+    budget_usd: 0.35
+
+  - id: first-handler
+    brief: >
+      ESTABLISH THE CONVENTION. (1) Create src/handlers/alpha.js exporting
+      { name: 'alpha', handle: (x) => `alpha:${x}` }. (2) Create src/index.js
+      that requires the registry and the alpha handler, registers alpha, and
+      re-exports the registry's register and all (so require('./src/index.js')
+      exposes all()). (3) Create test/convention.test.js (node:test + node:assert)
+      that requires src/index.js and asserts, for EVERY handler h in all(), that
+      /^[a-z]+(-[a-z]+)*$/.test(h.name) is true AND h.handle('z') === h.name +
+      ':z'. Future handler nodes will be checked against this exact test, so make
+      it loop over all() rather than naming alpha specifically.
+    deps: [registry-core]
+    context_globs: ["src/registry.js", "src/index.js", "src/handlers/alpha.js", "test/convention.test.js"]
+    blast_radius: ["src/**", "test/**"]
+    done_check: "node --test test/convention.test.js && node -e \"const r=require('./src/index.js'); const a=r.all().find(h=>h.name==='alpha'); process.exit(a && a.handle('q')==='alpha:q' && a.handle('m')==='alpha:m' ? 0 : 1)\""
+    budget_usd: 0.40
+
+  - id: dispatch
+    brief: >
+      Add src/dispatch.js exporting dispatch(name, x). It must require the
+      registry (via src/index.js or src/registry.js), find the registered handler
+      whose name === name, call its handle(x) and return the result. If no
+      handler matches, throw an Error. Do not change the handler convention.
+    deps: [first-handler]
+    context_globs: ["src/registry.js", "src/index.js", "src/dispatch.js", "src/handlers/alpha.js"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {dispatch}=require('./src/dispatch.js'); let threw=false; try{dispatch('nope','x')}catch(e){threw=true} process.exit(dispatch('alpha','q')==='alpha:q' && dispatch('alpha','7')==='alpha:7' && threw ? 0 : 1)\""
+    budget_usd: 0.30
+
+  - id: count-cmd
+    brief: >
+      Add src/count.js exporting count() that returns the number of registered
+      handlers (use the registry via src/index.js). Verify with the done_check.
+    deps: [dispatch]
+    context_globs: ["src/registry.js", "src/index.js", "src/count.js"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {count}=require('./src/count.js'); const all=require('./src/index.js').all(); process.exit(count()===1 && count()===all.length ? 0 : 1)\""
+    budget_usd: 0.30
+
+  - id: handler-beta
+    brief: >
+      Add a new handler following the convention EXACTLY. Read an existing
+      handler (src/handlers/alpha.js) and test/convention.test.js first. Create
+      src/handlers/beta.js exporting { name: 'beta', handle: (x) => `beta:${x}` }
+      (name must equal the filename stem and be kebab-case; handle(x) must return
+      `${name}:${x}`). Then edit src/index.js to require and register beta. Do NOT
+      edit test/convention.test.js. Run the convention test — it re-checks ALL
+      handlers.
+    deps: [count-cmd]
+    context_globs: ["src/registry.js", "src/index.js", "src/handlers/alpha.js", "test/convention.test.js"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/convention.test.js && git diff --quiet HEAD -- test/convention.test.js && node -e \"const {dispatch}=require('./src/dispatch.js'); process.exit(dispatch('beta','q')==='beta:q' && dispatch('beta','k')==='beta:k' ? 0 : 1)\""
+    budget_usd: 0.20
+
+  - id: handler-gamma
+    brief: >
+      Add a new handler following the convention EXACTLY. Read src/handlers/alpha.js
+      and test/convention.test.js first. Create src/handlers/gamma.js exporting
+      { name: 'gamma', handle: (x) => `gamma:${x}` }. Then edit src/index.js to
+      require and register gamma. Do NOT edit test/convention.test.js. Run the
+      convention test — it re-checks ALL handlers.
+    deps: [handler-beta]
+    context_globs: ["src/registry.js", "src/index.js", "src/handlers/alpha.js", "test/convention.test.js"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/convention.test.js && git diff --quiet HEAD -- test/convention.test.js && node -e \"const {dispatch}=require('./src/dispatch.js'); process.exit(dispatch('gamma','q')==='gamma:q' && dispatch('gamma','k')==='gamma:k' ? 0 : 1)\""
+    budget_usd: 0.20
+
+  - id: handler-delta
+    brief: >
+      Add a new handler following the convention EXACTLY. Read src/handlers/alpha.js
+      and test/convention.test.js first. Create src/handlers/delta.js exporting
+      { name: 'delta', handle: (x) => `delta:${x}` }. Then edit src/index.js to
+      require and register delta. Do NOT edit test/convention.test.js. Run the
+      convention test — it re-checks ALL handlers.
+    deps: [handler-gamma]
+    context_globs: ["src/registry.js", "src/index.js", "src/handlers/alpha.js", "test/convention.test.js"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/convention.test.js && git diff --quiet HEAD -- test/convention.test.js && node -e \"const {dispatch}=require('./src/dispatch.js'); process.exit(dispatch('delta','q')==='delta:q' && dispatch('delta','k')==='delta:k' ? 0 : 1)\""
+    budget_usd: 0.20
+
+  - id: handler-epsilon
+    brief: >
+      Add a new handler following the convention EXACTLY. Read src/handlers/alpha.js
+      and test/convention.test.js first. Create src/handlers/epsilon.js exporting
+      { name: 'epsilon', handle: (x) => `epsilon:${x}` }. Then edit src/index.js to
+      require and register epsilon. Do NOT edit test/convention.test.js. Run the
+      convention test — it re-checks ALL handlers.
+    deps: [handler-delta]
+    context_globs: ["src/registry.js", "src/index.js", "src/handlers/alpha.js", "test/convention.test.js"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/convention.test.js && git diff --quiet HEAD -- test/convention.test.js && node -e \"const {dispatch}=require('./src/dispatch.js'); process.exit(dispatch('epsilon','q')==='epsilon:q' && dispatch('epsilon','k')==='epsilon:k' ? 0 : 1)\""
+    budget_usd: 0.20

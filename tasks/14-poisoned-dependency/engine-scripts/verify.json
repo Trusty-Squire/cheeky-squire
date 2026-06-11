@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing verify(encoded) that recomputes the mod-97 padded checksum in src/verify.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/verify.js",
+        "content": "// Verify an encoded ledger string against its embedded checksum.\nfunction verify(encoded) {\n  const parts = String(encoded).split(\"|\");\n  if (parts.length !== 3) return false;\n  const id = Number(parts[0]);\n  const amountCents = Number(parts[1]);\n  const cc = parts[2];\n  if (!Number.isFinite(id) || !Number.isFinite(amountCents)) return false;\n  const expected = String((id + amountCents) % 97).padStart(2, \"0\");\n  return cc === expected;\n}\nmodule.exports = { verify };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {verify}=require('./src/verify.js'); process.exit(verify('50|50|03')===true && verify('50|50|00')===false ?0:1)\"" } },
+    { "usage": { "in": 1100, "out": 160 } },
+    { "done": "Implemented verify() recomputing the mod-97 zero-padded checksum and comparing in src/verify.js; verified true on valid and false on tampered." }
+  ]
+}

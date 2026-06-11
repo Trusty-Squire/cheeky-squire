@@ -1,0 +1,10 @@
+{
+  "steps": [
+    { "text": "Running the suite against the upgraded + migrated tree; not touching test/report.test.js; re-confirming the lockfile bump." },
+    { "tool": "bash", "args": { "command": "node --test test/report.test.js" } },
+    { "tool": "bash", "args": { "command": "git diff --quiet HEAD -- test/report.test.js && echo 'test unchanged'" } },
+    { "tool": "bash", "args": { "command": "grep -q '\"jsonfmt\": \"2.0.0\"' deps.lock.json && echo 'lockfile at v2'" } },
+    { "usage": { "in": 900, "out": 110 } },
+    { "done": "node --test test/report.test.js passes, test/report.test.js is byte-identical to HEAD, and deps.lock.json is at jsonfmt 2.0.0." }
+  ]
+}

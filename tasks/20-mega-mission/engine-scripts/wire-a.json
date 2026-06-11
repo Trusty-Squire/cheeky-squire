@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing src/wire/a.js with two two-argument emit call sites." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/wire/a.js",
+        "content": "const { emit } = require(\"../emit.js\");\nmodule.exports = {\n  a: (x) => emit(\"ping\", { n: x }),\n  b: (x) => emit(\"ping\", { n: x * 2 }),\n};\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const a=require('./src/wire/a.js'); process.exit(a.a(5)==='ping:5'&&a.b(5)==='ping:10'?0:1)\"" } },
+    { "usage": { "in": 800, "out": 110 } },
+    { "done": "Implemented src/wire/a.js: a(x)=emit('ping',{n:x}), b(x)=emit('ping',{n:x*2}); two call sites; verified." }
+  ]
+}

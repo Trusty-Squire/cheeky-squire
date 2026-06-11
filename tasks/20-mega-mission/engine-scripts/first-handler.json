@@ -1,0 +1,29 @@
+{
+  "steps": [
+    { "text": "Establishing the convention: ping handler, index that registers it, and the convention test re-checking all handlers." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/handlers/ping.js",
+        "content": "// Handler convention: module src/handlers/<type>.js exports { type, handle }\n// where type is kebab-case and equals the filename stem, and\n// handle(e) returns `${type}:${e.payload.n}`.\nmodule.exports = { type: \"ping\", handle: (e) => `ping:${e.payload.n}` };\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/index.js",
+        "content": "// Registers every handler and re-exports the registry surface.\nconst registry = require(\"./registry.js\");\nconst ping = require(\"./handlers/ping.js\");\nregistry.register(ping);\nmodule.exports = { register: registry.register, all: registry.all };\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/convention.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { all } = require(\"../src/index.js\");\n\nconst TYPE_RE = /^[a-z]+(-[a-z]+)*$/;\n\ntest(\"every registered handler honors the convention\", () => {\n  const handlers = all();\n  assert.ok(handlers.length >= 1, \"at least one handler must be registered\");\n  for (const h of handlers) {\n    assert.ok(TYPE_RE.test(h.type), `type not kebab-case: ${h.type}`);\n    assert.strictEqual(\n      h.handle({ payload: { n: 5 } }),\n      h.type + \":5\",\n      `handle output mismatch for ${h.type}`\n    );\n  }\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/convention.test.js" } },
+    { "usage": { "in": 1600, "out": 360 } },
+    { "done": "Created src/handlers/ping.js, src/index.js (registers ping + re-exports registry), and test/convention.test.js looping over all() to enforce the convention. Tests pass." }
+  ]
+}

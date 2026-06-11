@@ -1,0 +1,84 @@
+goal: "Build a tiny ledger pipeline: record -> store -> total -> encode -> encodeAll -> buildIndex -> verify. The canonical encoding of a record is `${id}|${amountCents}|${cc}` where cc is String((id + amountCents) % 97).padStart(2, '0'). Every downstream stage depends on encode being EXACTLY this contract."
+budget_usd: 2.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: record
+    brief: >
+      Implement make(id, amountCents) in src/record.js. It returns
+      { id, amountCents }. It throws if either argument is not a non-negative
+      integer (e.g. negatives, non-integers, NaN). Export make. Verify with the
+      done_check.
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {make}=require('./src/record.js'); const a=make(7,50); const ok=a.id===7&&a.amountCents===50; let t1=false; try{make(-1,0)}catch{t1=true} let t2=false; try{make(1,2.5)}catch{t2=true} process.exit(ok&&t1&&t2?0:1)\""
+    budget_usd: 0.40
+
+  - id: store
+    brief: >
+      Implement a Store in src/store.js with add(record) and all(). all()
+      returns the added records in insertion order. Export Store (a class or a
+      factory function exposing add/all). Verify with the done_check.
+    deps: [record]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {Store}=require('./src/store.js'); const {make}=require('./src/record.js'); const s=new Store(); s.add(make(1,10)); s.add(make(2,20)); const a=s.all(); process.exit(a.length===2&&a[0].id===1&&a[1].id===2?0:1)\""
+    budget_usd: 0.30
+
+  - id: total
+    brief: >
+      Implement total(store) in src/total.js. It returns the sum of amountCents
+      across store.all(). Export total. Verify with the done_check.
+    deps: [store]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {total}=require('./src/total.js'); const {Store}=require('./src/store.js'); const {make}=require('./src/record.js'); const s1=new Store(); s1.add(make(1,10)); s1.add(make(2,20)); const s2=new Store(); s2.add(make(3,5)); const t1=total(s1), t2=total(s2); process.exit(t1===30&&t2===5?0:1)\""
+    budget_usd: 0.30
+
+  - id: encoder
+    brief: >
+      Implement encode(record) in src/encode.js. It MUST return the string
+      `${id}|${amountCents}|${cc}` where the 2-char checksum cc is
+      String((id + amountCents) % 97).padStart(2, '0'). The modulus is 97 (NOT
+      100) and cc is ALWAYS zero-padded to exactly two characters. Export
+      encode. Verify with the done_check (it asserts exact strings).
+    deps: [total]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {encode}=require('./src/encode.js'); const r=require('./src/record.js'); process.exit( encode(r.make(7,50))==='7|50|57' && encode(r.make(90,90))==='90|90|83' && encode(r.make(1,0))==='1|0|01' && encode(r.make(50,50))==='50|50|03' ? 0 : 1)\""
+    budget_usd: 0.45
+
+  - id: encode-all
+    brief: >
+      Implement encodeAll(store) in src/encodeAll.js. It returns
+      store.all().map(encode) using encode from ./encode.js. Export encodeAll.
+      Verify with the done_check (it asserts exact strings).
+    deps: [encoder]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {encodeAll}=require('./src/encodeAll.js'); const {Store}=require('./src/store.js'); const {make}=require('./src/record.js'); const s=new Store(); s.add(make(7,50)); s.add(make(50,50)); const out=encodeAll(s); process.exit(out.length===2&&out[0]==='7|50|57'&&out[1]==='50|50|03'?0:1)\""
+    budget_usd: 0.35
+
+  - id: index
+    brief: >
+      Implement buildIndex(store) in src/buildIndex.js. It returns a Map (or
+      plain object) from each record's id to its encoded string, using encode /
+      encodeAll. Export buildIndex. Verify with the done_check.
+    deps: [encode-all]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {buildIndex}=require('./src/buildIndex.js'); const {Store}=require('./src/store.js'); const {make}=require('./src/record.js'); const s=new Store(); s.add(make(1,0)); s.add(make(90,90)); const idx=buildIndex(s); const get=(k)=>idx instanceof Map?idx.get(k):idx[k]; process.exit(get(1)==='1|0|01'&&get(90)==='90|90|83'?0:1)\""
+    budget_usd: 0.35
+
+  - id: verify
+    brief: >
+      Implement verify(encoded) in src/verify.js. Split encoded on '|' into id,
+      amountCents, cc. Recompute String((id + amountCents) % 97).padStart(2,'0')
+      and return true iff it equals the trailing cc. Export verify. The
+      done_check builds a store, encodes it, and asserts verify is true for
+      every produced string AND false for a tampered checksum.
+    deps: [index]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {verify}=require('./src/verify.js'); const {encodeAll}=require('./src/encodeAll.js'); const {Store}=require('./src/store.js'); const {make}=require('./src/record.js'); const s=new Store(); s.add(make(7,50)); s.add(make(90,90)); s.add(make(1,0)); s.add(make(50,50)); const all=encodeAll(s); const good=all.every(verify); const tampered=all[3].slice(0,-2)+'00'; const bad=verify(tampered)===false; process.exit(good&&bad?0:1)\""
+    budget_usd: 0.35

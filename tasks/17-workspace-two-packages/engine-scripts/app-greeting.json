@@ -1,0 +1,16 @@
+{
+  "steps": [
+    { "text": "Implementing greet() in app, consuming core via relative require." },
+    { "tool": "read", "args": { "path": "packages/core/src/strings.js" } },
+    {
+      "tool": "write",
+      "args": {
+        "path": "packages/app/src/greeting.js",
+        "content": "const { slugify, titleCase } = require(\"../../core/src/strings.js\");\nfunction greet(name) {\n  return { slug: slugify(name), title: titleCase(name) };\n}\nmodule.exports = { greet };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const a=require('./packages/app/src/greeting.js'); const assert=require('node:assert'); assert.deepStrictEqual(a.greet('ada lovelace'),{slug:'ada-lovelace',title:'Ada Lovelace'});\"" } },
+    { "usage": { "in": 1300, "out": 200 } },
+    { "done": "Implemented greet() returning {slug,title} from core strings via ../../core/src/strings.js." }
+  ]
+}

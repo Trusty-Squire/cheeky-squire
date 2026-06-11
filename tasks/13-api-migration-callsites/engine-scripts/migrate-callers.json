@@ -1,0 +1,50 @@
+{
+  "steps": [
+    { "text": "Migrating all 12 call sites in src/feat/f1..f6.js to pass an explicit 'info' level." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/feat/f1.js",
+        "content": "const { log } = require('../logger.js');\nmodule.exports = {\n  a: (x) => log('info', 'f1:' + x),\n  b: (x) => log('info', 'f1b:' + x),\n};\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/feat/f2.js",
+        "content": "const { log } = require('../logger.js');\nmodule.exports = {\n  a: (x) => log('info', 'f2:' + x),\n  b: (x) => log('info', 'f2b:' + x),\n};\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/feat/f3.js",
+        "content": "const { log } = require('../logger.js');\nmodule.exports = {\n  a: (x) => log('info', 'f3:' + x),\n  b: (x) => log('info', 'f3b:' + x),\n};\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/feat/f4.js",
+        "content": "const { log } = require('../logger.js');\nmodule.exports = {\n  a: (x) => log('info', 'f4:' + x),\n  b: (x) => log('info', 'f4b:' + x),\n};\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/feat/f5.js",
+        "content": "const { log } = require('../logger.js');\nmodule.exports = {\n  a: (x) => log('info', 'f5:' + x),\n  b: (x) => log('info', 'f5b:' + x),\n};\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/feat/f6.js",
+        "content": "const { log } = require('../logger.js');\nmodule.exports = {\n  a: (x) => log('info', 'f6:' + x),\n  b: (x) => log('info', 'f6b:' + x),\n};\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "for f in $(find src -name '*.js'); do node --check \"$f\" || exit 1; done && ! grep -rEn 'log\\([^,]*\\)' src/feat" } },
+    { "usage": { "in": 1400, "out": 260 } },
+    { "done": "All 12 call sites in src/feat/f1..f6.js now pass 'info' as the level; tree compiles and no single-arg log(...) calls remain." }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "steps": [
+    { "text": "Migrating src/report.js and src/summary.js call sites for the breaking jsonfmt v2 API (report -> {pretty:true}, summary -> {pretty:false})." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/report.js",
+        "content": "const { format } = require('../vendor/jsonfmt');\n\n// report renders a record as PRETTY (2-space indented) JSON.\nfunction report(obj) {\n  return format(obj, { pretty: true });\n}\n\nfunction reportWrapped(obj) {\n  return format({ wrapped: obj }, { pretty: true });\n}\n\nmodule.exports = { report, reportWrapped };\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/summary.js",
+        "content": "const { format } = require('../vendor/jsonfmt');\n\n// summary renders a record as COMPACT (single-line) JSON.\nfunction summary(obj) {\n  return format(obj, { pretty: false });\n}\n\nfunction summaryWrapped(obj) {\n  return format({ wrapped: obj }, { pretty: false });\n}\n\nmodule.exports = { summary, summaryWrapped };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "for f in $(find src -name '*.js'); do node --check \"$f\" || exit 1; done && ! grep -rEn 'format\\([^,)]*\\)' src" } },
+    { "usage": { "in": 1500, "out": 320 } },
+    { "done": "report callers pass {pretty:true}, summary callers pass {pretty:false}; tree compiles and no single-arg format(...) calls remain." }
+  ]
+}

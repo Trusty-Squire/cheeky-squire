@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing verify(encoded) that independently recomputes the checksum in src/verify.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/verify.js",
+        "content": "// Verify an encoded event string by recomputing the canonical checksum.\nfunction checksum(type) {\n  const sum = [...type].reduce((a, c) => a + c.charCodeAt(0), 0);\n  return String(sum % 97).padStart(2, \"0\");\n}\nfunction verify(encoded) {\n  const hash = encoded.lastIndexOf(\"#\");\n  if (hash === -1) return false;\n  const type = encoded.slice(0, hash);\n  const cc = encoded.slice(hash + 1);\n  return checksum(type) === cc;\n}\nmodule.exports = { verify };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {verify}=require('./src/verify.js'); process.exit(verify('ping#42')===true && verify('ab#01')===true && verify('ab#99')===false?0:1)\"" } },
+    { "usage": { "in": 1000, "out": 170 } },
+    { "done": "Implemented verify(encoded) recomputing the mod-97 padded checksum independently in src/verify.js; verified true on valid and false on tampered." }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "steps": [
+    { "text": "Implementing slugify in packages/core/src/strings.js." },
+    { "tool": "read", "args": { "path": "packages/core/src/strings.js" } },
+    {
+      "tool": "write",
+      "args": {
+        "path": "packages/core/src/strings.js",
+        "content": "function slugify(s) {\n  return String(s)\n    .toLowerCase()\n    .replace(/[\\s_]+/g, \"-\")\n    .replace(/[^a-z0-9-]/g, \"\")\n    .replace(/-+/g, \"-\")\n    .replace(/^-|-$/g, \"\");\n}\nfunction titleCase(_s) {\n  throw new Error(\"not implemented: titleCase\");\n}\nmodule.exports = { slugify, titleCase };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const s=require('./packages/core/src/strings.js'); process.exit(s.slugify('Hello World')==='hello-world' && s.slugify('A_B c')==='a-b-c'?0:1)\"" } },
+    { "usage": { "in": 1100, "out": 170 } },
+    { "done": "Implemented slugify(); titleCase remains a stub. Verified via node -e." }
+  ]
+}

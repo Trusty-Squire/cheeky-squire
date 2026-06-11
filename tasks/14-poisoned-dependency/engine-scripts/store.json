@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing the Store class in src/store.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/store.js",
+        "content": "// In-memory ledger store preserving insertion order.\nclass Store {\n  constructor() {\n    this._records = [];\n  }\n  add(record) {\n    this._records.push(record);\n    return record;\n  }\n  all() {\n    return this._records.slice();\n  }\n}\nmodule.exports = { Store };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {Store}=require('./src/store.js'); const s=new Store(); s.add({id:1}); s.add({id:2}); process.exit(s.all().length===2?0:1)\"" } },
+    { "usage": { "in": 950, "out": 130 } },
+    { "done": "Implemented Store with add/all preserving insertion order in src/store.js; verified." }
+  ]
+}

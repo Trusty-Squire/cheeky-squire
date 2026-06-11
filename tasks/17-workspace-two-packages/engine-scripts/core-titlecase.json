@@ -1,0 +1,16 @@
+{
+  "steps": [
+    { "text": "Implementing titleCase, keeping slugify." },
+    { "tool": "read", "args": { "path": "packages/core/src/strings.js" } },
+    {
+      "tool": "write",
+      "args": {
+        "path": "packages/core/src/strings.js",
+        "content": "function slugify(s) {\n  return String(s)\n    .toLowerCase()\n    .replace(/[\\s_]+/g, \"-\")\n    .replace(/[^a-z0-9-]/g, \"\")\n    .replace(/-+/g, \"-\")\n    .replace(/^-|-$/g, \"\");\n}\nfunction titleCase(s) {\n  return String(s)\n    .split(/\\s+/)\n    .filter(Boolean)\n    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())\n    .join(\" \");\n}\nmodule.exports = { slugify, titleCase };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const s=require('./packages/core/src/strings.js'); process.exit(s.titleCase('ada lovelace')==='Ada Lovelace' && s.slugify('A_B c')==='a-b-c'?0:1)\"" } },
+    { "usage": { "in": 1200, "out": 190 } },
+    { "done": "Implemented titleCase(); slugify unchanged. Verified via node -e." }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Reading SPEC.md: it mandates round-half-to-even (banker's rounding), not Math.round. Implementing accordingly in src/round.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/round.js",
+        "content": "// roundHalfEven(x): round x to the nearest integer using round-half-to-even\n// (banker's rounding) per SPEC.md. Exact halves go to the nearest EVEN\n// integer; all other values round normally.\nfunction roundHalfEven(x) {\n  const f = Math.floor(x);\n  const diff = x - f;\n  if (diff < 0.5) return f;\n  if (diff > 0.5) return f + 1;\n  // Exactly halfway: round to the nearest even integer.\n  return f % 2 === 0 ? f : f + 1;\n}\nmodule.exports = { roundHalfEven };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {roundHalfEven:r}=require('./src/round.js'); process.exit( r(0.5)===0 && r(1.5)===2 && r(2.5)===2 && r(3.5)===4 && r(-0.5)===0 && r(2.4)===2 && r(2.6)===3 ? 0 : 1)\"" } },
+    { "usage": { "in": 1200, "out": 220 } },
+    { "done": "Implemented roundHalfEven with round-half-to-even per SPEC.md (halves -> nearest even). Verified the distinguishing cases that a Math.round half-up impl would fail (0.5->0, 2.5->2)." }
+  ]
+}

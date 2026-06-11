@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Pinning the u21 stage behavior with a direct regression test." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/regression.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst u21 = require(\"../src/util/u21.js\");\n\ntest(\"u21 subtracts 1\", () => {\n  assert.strictEqual(u21(5), 4);\n  assert.strictEqual(u21(1), 0);\n  assert.strictEqual(u21(-3), -4);\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/regression.test.js" } },
+    { "usage": { "in": 1200, "out": 170 } },
+    { "done": "Added test/regression.test.js pinning u21(5)===4, u21(1)===0, u21(-3)===-4; `node --test test/regression.test.js` exits 0." }
+  ]
+}

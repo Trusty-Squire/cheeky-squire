@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --ext .ts",
     "experiment": "tsx scripts/experiment.ts",
+    "calibrate": "tsx scripts/calibrate.ts",
     "setup-fixtures": "tsx scripts/setup-fixtures.ts"
   },
   "dependencies": {

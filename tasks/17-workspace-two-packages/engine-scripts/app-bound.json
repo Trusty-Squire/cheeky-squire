@@ -1,0 +1,16 @@
+{
+  "steps": [
+    { "text": "Implementing bound() in app, consuming core via relative require." },
+    { "tool": "read", "args": { "path": "packages/core/src/numbers.js" } },
+    {
+      "tool": "write",
+      "args": {
+        "path": "packages/app/src/bound.js",
+        "content": "const { clamp } = require(\"../../core/src/numbers.js\");\nfunction bound(n) {\n  return clamp(n, 0, 100);\n}\nmodule.exports = { bound };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {bound}=require('./packages/app/src/bound.js'); process.exit(bound(-5)===0 && bound(250)===100 && bound(42)===42?0:1)\"" } },
+    { "usage": { "in": 1200, "out": 180 } },
+    { "done": "Implemented bound(n)=clamp(n,0,100) via ../../core/src/numbers.js." }
+  ]
+}

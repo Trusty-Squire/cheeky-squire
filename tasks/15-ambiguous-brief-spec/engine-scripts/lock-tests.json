@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Writing test/round.test.js to pin the round-half-to-even behavior, including the half cases a half-up impl gets wrong." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/round.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { roundHalfEven } = require(\"../src/round.js\");\n\ntest(\"halves round to the nearest even integer (banker's rounding)\", () => {\n  assert.strictEqual(roundHalfEven(0.5), 0);\n  assert.strictEqual(roundHalfEven(1.5), 2);\n  assert.strictEqual(roundHalfEven(2.5), 2);\n  assert.strictEqual(roundHalfEven(3.5), 4);\n  assert.strictEqual(roundHalfEven(-0.5), 0);\n  assert.strictEqual(roundHalfEven(-1.5), -2);\n});\n\ntest(\"non-half values round normally\", () => {\n  assert.strictEqual(roundHalfEven(2.4), 2);\n  assert.strictEqual(roundHalfEven(2.6), 3);\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/round.test.js" } },
+    { "usage": { "in": 1300, "out": 240 } },
+    { "done": "Wrote test/round.test.js pinning round-half-to-even with the distinguishing half cases (0.5->0, 2.5->2) plus non-half cases; the suite passes against the real module." }
+  ]
+}

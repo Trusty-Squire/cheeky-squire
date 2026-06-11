@@ -1,0 +1,46 @@
+goal: "Upgrade the vendored jsonfmt dependency from v1 to v2 (a breaking change to format), migrate every caller to the new options API, and prove the suite is green."
+budget_usd: 1.80
+chain: cheap
+workdir: "."
+nodes:
+  - id: upgrade-dep
+    brief: >
+      The vendored dependency jsonfmt is being upgraded from v1 to v2, which is
+      a BREAKING change: v2's format(obj, opts) now requires a second argument
+      with a boolean `opts.pretty` and throws if it is missing. Replace the
+      installed copy at vendor/jsonfmt/index.js with the v2 implementation found
+      in vendor/jsonfmt-v2/index.js (copy its content over), and bump
+      deps.lock.json from {"jsonfmt":"1.0.0"} to {"jsonfmt":"2.0.0"}. Do not edit
+      any src files in this node. Verify with the done_check.
+    context_globs: ["vendor/**", "deps.lock.json"]
+    blast_radius: ["vendor/jsonfmt/**", "deps.lock.json"]
+    done_check: "grep -q '\"jsonfmt\": \"2.0.0\"' deps.lock.json && ! grep -q '1.0.0' deps.lock.json && node -e \"const j=require('./vendor/jsonfmt'); process.exit(j.version==='2.0.0' && j.format({x:1},{pretty:false})==='{\\\"x\\\":1}' ? 0 : 1)\" && node -e \"const j=require('./vendor/jsonfmt'); try{ j.format({x:1}); process.exit(1);}catch(e){ process.exit(0);}\""
+    budget_usd: 0.60
+
+  - id: fix-callers
+    brief: >
+      jsonfmt v2 broke format(obj): every call site must now pass an explicit
+      { pretty: <boolean> } options object. Update src/report.js so its callers
+      pass { pretty: true } (PRETTY 2-space JSON) and src/summary.js so its
+      callers pass { pretty: false } (COMPACT JSON). Update BOTH call sites in
+      each file. Do not change which object is formatted. After this, no
+      single-argument format(...) call may remain anywhere under src. Verify with
+      the done_check (it compiles every src file, exercises report/summary on
+      multiple varied objects, and asserts zero leftover single-arg format calls).
+    deps: [upgrade-dep]
+    context_globs: ["src/**", "vendor/**"]
+    blast_radius: ["src/**"]
+    done_check: "for f in $(find src -name '*.js'); do node --check \"$f\" || exit 1; done && node -e \"const i=require('./src/index.js'); const r=i.report({a:1}); const r2=i.report({k:9}); const s=i.summary({b:2}); const s2=i.summary({m:7}); process.exit(r==='{\\n  \\\"a\\\": 1\\n}' && r2==='{\\n  \\\"k\\\": 9\\n}' && s==='{\\\"b\\\":2}' && s2==='{\\\"m\\\":7}' ? 0 : 1)\" && ! grep -rEn 'format\\([^,)]*\\)' src"
+    budget_usd: 0.70
+
+  - id: verify
+    brief: >
+      Run the full test suite (node --test test/report.test.js) and confirm it
+      passes against the upgraded + migrated tree. Do NOT edit test/report.test.js
+      — it is diff-guarded and must remain byte-identical to HEAD. Re-confirm that
+      deps.lock.json is pinned to jsonfmt 2.0.0.
+    deps: [fix-callers]
+    context_globs: ["src/**", "test/**", "deps.lock.json"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/report.test.js && git diff --quiet HEAD -- test/report.test.js && grep -q '\"jsonfmt\": \"2.0.0\"' deps.lock.json"
+    budget_usd: 0.50

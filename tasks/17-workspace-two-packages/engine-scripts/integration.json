@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Writing the end-to-end cross-package integration test." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "packages/app/test/integration.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { run } = require(\"../src/cli.js\");\n\ntest(\"end-to-end: app -> core slugify/titleCase/clamp\", () => {\n  assert.strictEqual(run([\"--name\", \"grace hopper\", \"--score\", \"150\"]), \"Grace Hopper scored 100\");\n  assert.strictEqual(run([\"--name\", \"ada_lovelace\", \"--score\", \"7\"]), \"Ada_lovelace scored 7\");\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test packages/app/test/integration.test.js" } },
+    { "usage": { "in": 1300, "out": 220 } },
+    { "done": "Wrote integration.test.js asserting the full cross-package run; app.test.js left untouched." }
+  ]
+}

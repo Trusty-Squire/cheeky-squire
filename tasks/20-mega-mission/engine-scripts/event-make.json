@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing make(type, payload) with validation in src/event.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/event.js",
+        "content": "// Event factory. make(type, payload) returns { type, payload } and validates\n// that type is a non-empty string and payload is a non-null object.\nfunction make(type, payload) {\n  if (typeof type !== \"string\" || type.length === 0) {\n    throw new Error(`invalid event type: ${type}`);\n  }\n  if (typeof payload !== \"object\" || payload === null) {\n    throw new Error(`invalid event payload: ${payload}`);\n  }\n  return { type, payload };\n}\nmodule.exports = { make };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {make}=require('./src/event.js'); const e=make('ping',{n:5}); let t=false; try{make('',{})}catch{t=true} process.exit(e.type==='ping'&&t?0:1)\"" } },
+    { "usage": { "in": 900, "out": 150 } },
+    { "done": "Implemented make(type,payload) in src/event.js with non-empty-string type and non-null-object payload validation; verified." }
+  ]
+}

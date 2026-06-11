@@ -1,0 +1,25 @@
+{
+  "steps": [
+    { "text": "Reading the existing handler and convention test, then adding epsilon exactly per convention." },
+    { "tool": "read", "args": { "path": "src/handlers/alpha.js" } },
+    { "tool": "read", "args": { "path": "src/index.js" } },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/handlers/epsilon.js",
+        "content": "module.exports = { name: \"epsilon\", handle: (x) => `epsilon:${x}` };\n"
+      }
+    },
+    {
+      "tool": "edit",
+      "args": {
+        "path": "src/index.js",
+        "oldString": "module.exports = { register: registry.register, all: registry.all };",
+        "newString": "registry.register(require(\"./handlers/epsilon.js\"));\nmodule.exports = { register: registry.register, all: registry.all };"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/convention.test.js" } },
+    { "usage": { "in": 1400, "out": 200 } },
+    { "done": "Added src/handlers/epsilon.js per the convention and registered it in src/index.js; convention test passes." }
+  ]
+}

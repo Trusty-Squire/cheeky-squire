@@ -1,0 +1,41 @@
+goal: "Migrate the logging API from log(message) to log(level, message) across all 12+ call sites, keeping the suite green and the tree compiling."
+budget_usd: 1.80
+chain: cheap
+workdir: "."
+nodes:
+  - id: change-signature
+    brief: >
+      In src/logger.js, change the exported log function from log(message) to
+      log(level, message). It must return `[${level.toUpperCase()}] ${message}`
+      (e.g. log('info','hi') === '[INFO] hi'). The old single-argument behavior
+      (returning '[LOG] ...') must be gone. Keep it exported as `log`. Verify
+      with the done_check.
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "node -e \"const {log}=require('./src/logger.js'); process.exit(log('info','hi')==='[INFO] hi' && log('warn','yo')==='[WARN] yo' && log('hi')!=='[LOG] hi' ? 0 : 1)\""
+    budget_usd: 0.50
+
+  - id: migrate-callers
+    brief: >
+      Update EVERY call site in src/feat/*.js (there are 12, two per file f1..f6)
+      to pass 'info' as the explicit level as the first argument, keeping each
+      feature's existing message as the second argument. Do not change the
+      messages. After this, no single-argument log(...) call may remain anywhere
+      under src/feat. Verify with the done_check (which compiles every src file,
+      checks several migrated outputs, and asserts zero leftover single-arg calls).
+    deps: [change-signature]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "for f in $(find src -name '*.js'); do node --check \"$f\" || exit 1; done && node -e \"const i=require('./src/index.js'); process.exit(i.f1.a('x')==='[INFO] f1:x' && i.f3.b('y')==='[INFO] f3b:y' && i.f6.a('z')==='[INFO] f6:z' ? 0 : 1)\" && ! grep -rEn 'log\\([^,]*\\)' src/feat"
+    budget_usd: 0.80
+
+  - id: tests
+    brief: >
+      Run the full test suite (node --test test/api.test.js) and confirm it
+      passes against the migrated tree. Do NOT edit test/api.test.js — it is
+      diff-guarded and must remain byte-identical to HEAD.
+    deps: [migrate-callers]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/api.test.js && git diff --quiet HEAD -- test/api.test.js"
+    budget_usd: 0.50

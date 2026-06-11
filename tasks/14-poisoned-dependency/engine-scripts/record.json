@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing make() with non-negative-integer validation in src/record.js." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/record.js",
+        "content": "// Ledger record factory. A record is { id, amountCents }.\nfunction isNonNegInt(n) {\n  return typeof n === \"number\" && Number.isInteger(n) && n >= 0;\n}\nfunction make(id, amountCents) {\n  if (!isNonNegInt(id)) throw new Error(`invalid id: ${id}`);\n  if (!isNonNegInt(amountCents)) throw new Error(`invalid amountCents: ${amountCents}`);\n  return { id, amountCents };\n}\nmodule.exports = { make };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node -e \"const {make}=require('./src/record.js'); make(7,50); try{make(-1,0); process.exit(1)}catch{} process.exit(0)\"" } },
+    { "usage": { "in": 900, "out": 140 } },
+    { "done": "Implemented make() in src/record.js with non-negative integer validation; verified." }
+  ]
+}

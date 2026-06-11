@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Writing the end-to-end integration test exercising emit, encode/verify, and the handler convention." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "test/integration.test.js",
+        "content": "const test = require(\"node:test\");\nconst assert = require(\"node:assert\");\nconst { make } = require(\"../src/event.js\");\nconst { Store } = require(\"../src/store.js\");\nconst { encodeAll } = require(\"../src/encodeAll.js\");\nconst { verify } = require(\"../src/verify.js\");\nconst { emit } = require(\"../src/emit.js\");\nconst { all } = require(\"../src/index.js\");\n\nconst TYPE_RE = /^[a-z]+(-[a-z]+)*$/;\n\ntest(\"emit dispatches every handler through the migrated API\", () => {\n  assert.strictEqual(emit({ type: \"ping\", payload: { n: 1 } }), \"ping:1\");\n  assert.strictEqual(emit({ type: \"pong\", payload: { n: 2 } }), \"pong:2\");\n  assert.strictEqual(emit({ type: \"tick\", payload: { n: 3 } }), \"tick:3\");\n});\n\ntest(\"encode/verify roundtrip holds for a store of events\", () => {\n  const store = new Store();\n  store.add(make(\"ping\", { n: 1 }));\n  store.add(make(\"pong\", { n: 2 }));\n  store.add(make(\"tick\", { n: 3 }));\n  const encoded = encodeAll(store);\n  assert.strictEqual(encoded.length, 3);\n  for (const s of encoded) {\n    assert.strictEqual(verify(s), true, `verify failed for ${s}`);\n  }\n  const tampered = encoded[0].split(\"#\")[0] + \"#99\";\n  assert.strictEqual(verify(tampered), false);\n});\n\ntest(\"every registered handler conforms to the convention\", () => {\n  const handlers = all();\n  assert.ok(handlers.length >= 3);\n  for (const h of handlers) {\n    assert.ok(TYPE_RE.test(h.type), `type not kebab-case: ${h.type}`);\n    assert.strictEqual(h.handle({ payload: { n: 5 } }), `${h.type}:5`);\n  }\n});\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/integration.test.js" } },
+    { "usage": { "in": 1800, "out": 420 } },
+    { "done": "Wrote test/integration.test.js: emits ping/pong/tick through emit({type,payload}), roundtrips encode/verify over a store, and asserts every handler conforms to the convention. Tests pass." }
+  ]
+}

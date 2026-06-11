@@ -1,0 +1,34 @@
+goal: "Refactor a correct-but-slow O(n^2) dedupe to O(n) under a performance gate, then add a property test."
+budget_usd: 1.50
+chain: cheap
+workdir: "."
+nodes:
+  - id: optimize
+    brief: >
+      src/dedupe.js ships a CORRECT but SLOW O(n^2) dedupe (it scans the
+      output array with indexOf for every element). Refactor it to O(n) —
+      e.g. track seen values in a Set — while keeping IDENTICAL behavior:
+      remove duplicates, preserve first-occurrence order, return a new array.
+      Do not change test/dedupe.test.js. The done_check runs the correctness
+      test, verifies the test file is untouched, and runs the performance
+      bench (checks/bench.js) which fails on the O(n^2) version and passes on
+      an O(n) one.
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["src/**"]
+    done_check: "node --test test/dedupe.test.js && git diff --quiet HEAD -- test/dedupe.test.js && node checks/bench.js"
+    budget_usd: 0.80
+
+  - id: property-test
+    brief: >
+      Add test/property.test.js (node:test + node:assert) importing dedupe
+      from ../src/dedupe.js. Assert dedupe's properties on several VARIED
+      inputs: idempotence (dedupe(dedupe(x)) deep-equals dedupe(x)),
+      first-occurrence order is preserved, and the output contains no
+      duplicates. Make the order assertion strong enough to fail a buggy
+      implementation that sorts the output. Run
+      `node --test test/property.test.js`.
+    deps: [optimize]
+    context_globs: ["src/**", "test/**"]
+    blast_radius: ["test/**"]
+    done_check: "grep -q dedupe test/property.test.js && bash checks/mutation-guard.sh src/dedupe.js checks/dedupe.mutant.js 'node --test test/property.test.js'"
+    budget_usd: 0.70

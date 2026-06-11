@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Implementing parseDuration() per the SPEC." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/duration.js",
+        "content": "// parseDuration(s): parse one or more <number><unit> segments into total\n// seconds. Units: h=3600s, m=60s, s=1s. Whitespace is not allowed; an empty\n// string or any invalid format throws.\nconst UNIT = { h: 3600, m: 60, s: 1 };\n\nfunction parseDuration(s) {\n  if (typeof s !== \"string\" || s.length === 0) {\n    throw new Error(\"parseDuration: empty or non-string input\");\n  }\n  if (!/^(\\d+[hms])+$/.test(s)) {\n    throw new Error(`parseDuration: invalid format: ${JSON.stringify(s)}`);\n  }\n  let total = 0;\n  for (const m of s.matchAll(/(\\d+)([hms])/g)) {\n    total += Number(m[1]) * UNIT[m[2]];\n  }\n  return total;\n}\nmodule.exports = { parseDuration };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node --test test/duration.test.js" } },
+    { "usage": { "in": 1200, "out": 230 } },
+    { "done": "Implemented parseDuration() in src/duration.js using a strict /^(\\d+[hms])+$/ guard plus per-segment summation (h=3600, m=60, s=1). `node --test test/duration.test.js` exits 0 and the test file is unchanged." }
+  ]
+}
