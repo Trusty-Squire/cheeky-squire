@@ -1,0 +1,83 @@
+import type { Chain } from "../contract/schema.js";
+
+export interface Rung {
+  /** 1-based rung number. */
+  rung: number;
+  /** Model slug to run this rung with. */
+  model: string;
+  /** Append the structured FAILURE CONTEXT block to the brief. */
+  addFailureContext: boolean;
+  /** Append the prior attempt's diff (rung 4 only). */
+  addPriorDiff: boolean;
+}
+
+/**
+ * The escalation ladder (SPEC §9). Rung 5 = MISSION_HALTED, represented by
+ * exhausting this 4-element array (the runner halts when no rung remains).
+ */
+export function ladder(chain: Chain): Rung[] {
+  return [
+    { rung: 1, model: chain.executor, addFailureContext: false, addPriorDiff: false },
+    { rung: 2, model: chain.executor, addFailureContext: true, addPriorDiff: false },
+    { rung: 3, model: chain.fallback, addFailureContext: true, addPriorDiff: false },
+    { rung: 4, model: chain.knight, addFailureContext: true, addPriorDiff: true },
+  ];
+}
+
+export const MAX_RUNGS = 4;
+
+export interface FailureInfo {
+  gateCommand: string;
+  exitCode: number;
+  timedOut: boolean;
+  stderrTail: string;
+  reconcileViolations: string[];
+  confabulation: boolean;
+  /** What the previous attempt changed (file list). */
+  changedFiles: string[];
+  /** Prior attempt's unified diff (only attached on rung 4). */
+  priorDiff?: string;
+}
+
+/**
+ * Build the FAILURE CONTEXT block — structured, harness-authored, never free
+ * prose from the failed model. The failed attempt's transcript is NOT carried
+ * forward (SPEC §9).
+ */
+export function buildFailureContext(info: FailureInfo): string {
+  const lines: string[] = [];
+  lines.push("=== FAILURE CONTEXT (previous attempt) ===");
+  lines.push("The previous attempt did not pass the gate. Facts:");
+  lines.push(`- gate command: ${info.gateCommand}`);
+  lines.push(`- gate exit code: ${info.exitCode}${info.timedOut ? " (timed out)" : ""}`);
+  if (info.stderrTail.trim()) {
+    lines.push("- gate stderr (tail):");
+    lines.push(indent(info.stderrTail.trim(), "    "));
+  }
+  if (info.reconcileViolations.length > 0) {
+    lines.push("- reconcile violations:");
+    for (const v of info.reconcileViolations) lines.push(`    * ${v}`);
+  }
+  if (info.confabulation) {
+    lines.push("- WARNING: previous attempt claimed a check ran but no such command was executed.");
+  }
+  lines.push(
+    info.changedFiles.length > 0
+      ? `- files the previous attempt changed: ${info.changedFiles.join(", ")}`
+      : "- the previous attempt changed no files.",
+  );
+  if (info.priorDiff && info.priorDiff.trim()) {
+    lines.push("- previous attempt diff:");
+    lines.push(indent(info.priorDiff.trim(), "    "));
+  }
+  lines.push("Start fresh from the current (reset) repository state. Do not assume any prior change persists.");
+  lines.push("=== END FAILURE CONTEXT ===");
+  return lines.join("\n");
+}
+
+function indent(text: string, pad: string): string {
+  return text
+    .split("\n")
+    .map((l) => pad + l)
+    .join("\n");
+}
