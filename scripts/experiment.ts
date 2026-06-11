@@ -7,10 +7,10 @@
  * --dry-run validates all missions + fixtures, prints the empty table schema,
  * and exits 0 (no API key, no network). This is gate #5.
  */
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseChains } from "../src/contract/schema.js";
+import { parseChains, resolveChain } from "../src/contract/schema.js";
 import { discoverTasks, selectTasks } from "../src/experiment/tasks.js";
 import { validateTask, runTask, type TaskMetrics } from "../src/experiment/run.js";
 
@@ -23,13 +23,20 @@ const COLUMNS = [
   "chain",
   "completed",
   "nodes",
+  "recovered",
+  "rungHist",
   "escalated",
-  "retries",
   "confab",
-  "blastDenied",
+  "blastBlocks",
   "wall_s",
   "cost_usd",
+  "trace",
 ] as const;
+
+function rungHistStr(h: Record<string, number>): string {
+  const keys = Object.keys(h).sort();
+  return keys.length === 0 ? "-" : keys.map((r) => `r${r}:${h[r]}`).join(" ");
+}
 
 async function main(argv: string[]): Promise<number> {
   const flags = parseFlags(argv);
@@ -37,12 +44,16 @@ async function main(argv: string[]): Promise<number> {
   const allTasks = discoverTasks(TASKS_ROOT);
   const taskNums = parseTaskNums(flags.value.get("tasks"));
   const tasks = selectTasks(allTasks, taskNums);
-  const chainNames = (flags.value.get("chains") ?? "cheap,knight-only")
+  const mock = flags.bool.has("mock");
+  const dryRun = flags.bool.has("dry-run");
+  // The full live matrix includes the cheap-raw ablation; --mock defaults to the
+  // two scripted chains (raw mode is a live ablation — it tests whether the raw
+  // agent can self-decompose, which a scripted mock can't represent per task).
+  const defaultChains = mock ? "cheap,knight-only" : "cheap-raw,cheap,knight-only";
+  const chainNames = (flags.value.get("chains") ?? defaultChains)
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const mock = flags.bool.has("mock");
-  const dryRun = flags.bool.has("dry-run");
 
   if (tasks.length === 0) {
     process.stderr.write(`no tasks found under ${TASKS_ROOT}\n`);
@@ -65,6 +76,20 @@ async function main(argv: string[]): Promise<number> {
   }
 
   if (dryRun) {
+    // Validate that every requested chain resolves against chains.yaml.
+    const badChains: string[] = [];
+    for (const name of chainNames) {
+      try {
+        resolveChain(chains, name);
+      } catch {
+        badChains.push(name);
+      }
+    }
+    if (badChains.length > 0) {
+      process.stderr.write(`unknown chain(s): ${badChains.join(", ")}\n`);
+      return 1;
+    }
+    process.stdout.write(`\nChains OK: ${chainNames.map((n) => `${n}(harness=${chains.chains[n]!.harness})`).join(", ")}\n`);
     process.stdout.write("\nDRY RUN — result table schema:\n");
     process.stdout.write(COLUMNS.join(",") + "\n");
     process.stdout.write("(empty: the real run needs OPENROUTER_API_KEY and is performed by the human)\n");
@@ -83,6 +108,12 @@ async function main(argv: string[]): Promise<number> {
   const rows: TaskMetrics[] = [];
   for (const task of tasks) {
     for (const chainName of chainNames) {
+      // Raw mode under --mock needs a per-task "(raw).json" script; tasks don't
+      // ship one (raw is a live ablation), so skip with a clear note.
+      if (mock && chains.chains[chainName]?.harness === "off" && !existsSync(join(task.scriptsDir, "(raw).json"))) {
+        process.stdout.write(`\n=== ${task.name} x ${chainName} (mock) — SKIP: raw mode is a live ablation (no (raw).json) ===\n`);
+        continue;
+      }
       process.stdout.write(`\n=== ${task.name} x ${chainName}${mock ? " (mock)" : ""} ===\n`);
       const m = await runTask({ task, chainName, chains, mock, apiKey, runId, resultsDir });
       rows.push(m);
@@ -101,7 +132,7 @@ async function main(argv: string[]): Promise<number> {
 }
 
 function printTable(rows: TaskMetrics[]): void {
-  const widths = [22, 12, 9, 7, 9, 7, 6, 11, 7, 9];
+  const widths = [24, 12, 9, 7, 9, 12, 9, 6, 11, 7, 9, 24];
   const header = COLUMNS.map((c, i) => c.padEnd(widths[i] ?? 8)).join(" ");
   process.stdout.write("\n" + header + "\n" + "-".repeat(header.length) + "\n");
   for (const r of rows) {
@@ -110,42 +141,87 @@ function printTable(rows: TaskMetrics[]): void {
       r.chain,
       String(r.completed),
       `${r.nodesPassed}/${r.nodesTotal}`,
+      String(r.recoveredNodes),
+      rungHistStr(r.rungHistogram),
       String(r.escalatedNodes),
-      String(r.retries),
       String(r.confabulations),
       String(r.blastDenied),
       r.wallSeconds.toFixed(1),
       r.costUsd.toFixed(4),
+      r.traceArchive ? basename(r.traceArchive) : "-",
     ];
     process.stdout.write(cells.map((c, i) => c.padEnd(widths[i] ?? 8)).join(" ") + "\n");
   }
 }
 
-function printVerdict(rows: TaskMetrics[], chainNames: string[]): void {
-  const cheapName = chainNames.find((c) => c !== "knight-only") ?? chainNames[0]!;
-  const knightName = chainNames.find((c) => c === "knight-only");
+interface ChainAgg {
+  chain: string;
+  missions: number;
+  completed: number;
+  nodesTotal: number;
+  nodesPassed: number;
+  recovered: number;
+  escalated: number;
+  confab: number;
+  cost: number;
+  costPerCompleted: number;
+}
 
-  const cheapRows = rows.filter((r) => r.chain === cheapName);
-  const cheapMissions = cheapRows.length;
-  const cheapCompleted = cheapRows.filter((r) => r.completed).length;
-  const cheapNodesTotal = cheapRows.reduce((s, r) => s + r.nodesTotal, 0);
-  const cheapNodesPassed = cheapRows.reduce((s, r) => s + r.nodesPassed, 0);
-  const nodePct = cheapNodesTotal === 0 ? 0 : Math.round((cheapNodesPassed / cheapNodesTotal) * 100);
-  const escalated = cheapRows.reduce((s, r) => s + r.escalatedNodes, 0);
-  const cheapCost = cheapRows.reduce((s, r) => s + r.costUsd, 0);
-  const knightCost = knightName
-    ? rows.filter((r) => r.chain === knightName).reduce((s, r) => s + r.costUsd, 0)
-    : 0;
-  const ratio = knightCost > 0 ? (cheapCost / knightCost).toFixed(3) : "n/a";
+function aggregate(rows: TaskMetrics[], chain: string): ChainAgg {
+  const r = rows.filter((x) => x.chain === chain);
+  const completed = r.filter((x) => x.completed).length;
+  const cost = r.reduce((s, x) => s + x.costUsd, 0);
+  return {
+    chain,
+    missions: r.length,
+    completed,
+    nodesTotal: r.reduce((s, x) => s + x.nodesTotal, 0),
+    nodesPassed: r.reduce((s, x) => s + x.nodesPassed, 0),
+    recovered: r.reduce((s, x) => s + x.recoveredNodes, 0),
+    escalated: r.reduce((s, x) => s + x.escalatedNodes, 0),
+    confab: r.reduce((s, x) => s + x.confabulations, 0),
+    cost,
+    costPerCompleted: completed > 0 ? cost / completed : NaN,
+  };
+}
+
+function pct(a: ChainAgg): number {
+  return a.nodesTotal === 0 ? 0 : Math.round((a.nodesPassed / a.nodesTotal) * 100);
+}
+
+function printVerdict(rows: TaskMetrics[], chainNames: string[]): void {
+  const present = chainNames.filter((c) => rows.some((r) => r.chain === c));
+  const aggs = new Map(present.map((c) => [c, aggregate(rows, c)] as const));
 
   process.stdout.write("\n--- VERDICT ---\n");
-  process.stdout.write(
-    `cheap-chain completion: ${cheapCompleted}/${cheapMissions} missions, ${nodePct}% of nodes\n`,
-  );
-  process.stdout.write(`escalation rate: ${escalated} node(s) hit rung>=3\n`);
-  process.stdout.write(
-    `cost: $${cheapCost.toFixed(4)} cheap vs $${knightCost.toFixed(4)} knight  (ratio ${ratio})\n`,
-  );
+
+  // Lead with the ablation delta: cheap-raw vs cheap.
+  const raw = aggs.get("cheap-raw");
+  const cheap = aggs.get("cheap");
+  if (raw && cheap) {
+    process.stdout.write(
+      `ABLATION (harness lift): cheap-raw ${raw.completed}/${raw.missions} missions (${pct(raw)}% nodes) ` +
+        `vs cheap ${cheap.completed}/${cheap.missions} (${pct(cheap)}% nodes) ` +
+        `— +${cheap.completed - raw.completed} missions, +${pct(cheap) - pct(raw)} pts of nodes from the harness\n`,
+    );
+  } else {
+    process.stdout.write("ABLATION: run --chains cheap-raw,cheap to see the harness lift\n");
+  }
+
+  // Cost per COMPLETED mission for all three chains.
+  process.stdout.write("cost per COMPLETED mission:\n");
+  for (const c of present) {
+    const a = aggs.get(c)!;
+    const cpc = Number.isFinite(a.costPerCompleted) ? `$${a.costPerCompleted.toFixed(4)}` : "n/a (0 completed)";
+    process.stdout.write(`  ${c.padEnd(12)} ${a.completed}/${a.missions} completed, total $${a.cost.toFixed(4)}, ${cpc}/mission\n`);
+  }
+
+  // Ladder recovery + escalation on the cheap chain.
+  if (cheap) {
+    process.stdout.write(
+      `ladder: ${cheap.recovered} node(s) recovered by escalation (failed rung 1, passed later); ${cheap.escalated} hit rung>=3; ${cheap.confab} confabulation flag(s)\n`,
+    );
+  }
 }
 
 function writeCsv(rows: TaskMetrics[]): string {
@@ -161,12 +237,14 @@ function writeCsv(rows: TaskMetrics[]): string {
         r.chain,
         r.completed,
         `${r.nodesPassed}/${r.nodesTotal}`,
+        r.recoveredNodes,
+        `"${rungHistStr(r.rungHistogram)}"`,
         r.escalatedNodes,
-        r.retries,
         r.confabulations,
         r.blastDenied,
         r.wallSeconds.toFixed(2),
         r.costUsd.toFixed(6),
+        r.traceArchive ? basename(r.traceArchive) : "",
       ].join(","),
     );
   }

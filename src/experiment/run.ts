@@ -58,6 +58,10 @@ export interface TaskMetrics {
   nodesTotal: number;
   escalatedNodes: number; // nodes that reached rung >= 3
   retries: number; // total extra attempts beyond the first, summed across nodes
+  /** Nodes that failed rung 1 but passed at a later rung — the ladder recovered them. */
+  recoveredNodes: number;
+  /** Histogram of pass-rung across passed nodes, e.g. { "1": 8, "3": 1 }. */
+  rungHistogram: Record<string, number>;
   confabulations: number;
   blastDenied: number;
   wallSeconds: number;
@@ -117,6 +121,14 @@ export async function runTask(opts: RunTaskOptions): Promise<TaskMetrics> {
     const retries = summary.nodes.reduce((s, n) => s + Math.max(0, n.attempts - 1), 0);
     const confabulations = summary.nodes.reduce((s, n) => s + n.confabulations, 0);
     const blastDenied = summary.nodes.reduce((s, n) => s + n.blastDenied, 0);
+    const recoveredNodes = summary.nodes.filter((n) => n.passed && (n.passRung ?? 1) > 1).length;
+    const rungHistogram: Record<string, number> = {};
+    for (const n of summary.nodes) {
+      if (n.passed) {
+        const r = String(n.passRung ?? 1);
+        rungHistogram[r] = (rungHistogram[r] ?? 0) + 1;
+      }
+    }
 
     // Archive the trace before the temp dir is reaped (findings need it).
     let traceArchive: string | undefined;
@@ -136,6 +148,8 @@ export async function runTask(opts: RunTaskOptions): Promise<TaskMetrics> {
       nodesTotal: mission.nodes.length,
       escalatedNodes,
       retries,
+      recoveredNodes,
+      rungHistogram,
       confabulations,
       blastDenied,
       wallSeconds: (Date.now() - startedAt) / 1000,

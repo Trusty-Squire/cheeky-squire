@@ -109,6 +109,8 @@ interface NodeSummary {
   confabulations: number;
   gateExit?: number;
   costUsd: number;
+  /** Rung at which the node passed (set on node_pass). >1 means the ladder recovered it. */
+  passRung?: number;
 }
 
 /** Aggregate per-node stats from a trace event list. */
@@ -175,6 +177,7 @@ export function summarize(events: TraceEvent[]): {
       }
       case "node_pass":
         s.passed = true;
+        s.passRung = ev.rung ?? 1;
         break;
       case "node_fail":
         s.failed = true;
