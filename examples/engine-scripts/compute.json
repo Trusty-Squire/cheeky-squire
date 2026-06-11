@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Creating src/sum.js exporting sum(a, b)." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/sum.js",
+        "content": "function sum(a, b) {\n  return a + b;\n}\nmodule.exports = { sum };\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node checks/compute.js" } },
+    { "usage": { "in": 1100, "out": 160 } },
+    { "done": "Wrote src/sum.js and ran `node checks/compute.js`, which exits 0." }
+  ]
+}

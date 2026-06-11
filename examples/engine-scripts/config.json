@@ -1,0 +1,15 @@
+{
+  "steps": [
+    { "text": "Creating src/config.json with name and factor." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/config.json",
+        "content": "{\n  \"name\": \"squire\",\n  \"factor\": 2\n}\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node checks/config.js" } },
+    { "usage": { "in": 1200, "out": 180 } },
+    { "done": "Wrote src/config.json and ran `node checks/config.js`, which exits 0." }
+  ]
+}

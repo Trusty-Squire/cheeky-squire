@@ -1,0 +1,17 @@
+# Named chains with pinned model slugs and prices.
+# These slugs are PLACEHOLDERS — pin real OpenRouter slugs here before a real
+# run (see README "pinning real model slugs"). Prices are per MILLION tokens
+# and drive budget.ts; they are user-maintained config, not code.
+chains:
+  cheap:
+    executor: "qwen/qwen3-coder" # cheap workhorse
+    fallback: "deepseek/deepseek-chat" # second cheap model
+    knight: "anthropic/claude-opus-4" # frontier escalation target
+  knight-only:
+    executor: "anthropic/claude-opus-4"
+    fallback: "anthropic/claude-opus-4"
+    knight: "anthropic/claude-opus-4"
+prices: # per million tokens
+  "qwen/qwen3-coder": { in: 0.20, out: 0.80 }
+  "deepseek/deepseek-chat": { in: 0.14, out: 0.28 }
+  "anthropic/claude-opus-4": { in: 15.0, out: 75.0 }

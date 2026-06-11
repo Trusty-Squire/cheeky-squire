@@ -1,0 +1,33 @@
+goal: "Assemble a tiny config -> compute -> report pipeline (mock demo, no LLM)."
+budget_usd: 1.00
+chain: cheap
+workdir: "demo-fixture"
+nodes:
+  - id: config
+    brief: >
+      Create src/config.json containing a JSON object with keys "name"
+      (string) and "factor" (number 2). Run `node checks/config.js` and
+      ensure it exits 0 before declaring done.
+    blast_radius: ["src/**"]
+    done_check: "node checks/config.js"
+    budget_usd: 0.30
+
+  - id: compute
+    brief: >
+      Create src/sum.js, a CommonJS module exporting `sum(a, b)` returning
+      a + b. Run `node checks/compute.js` and ensure it exits 0 before
+      declaring done.
+    blast_radius: ["src/**"]
+    done_check: "node checks/compute.js"
+    budget_usd: 0.30
+
+  - id: report
+    brief: >
+      Read src/config.json and src/sum.js, then write src/report.txt whose
+      first line is the word OK. Run `grep -q OK src/report.txt` before
+      declaring done.
+    deps: [config, compute]
+    context_globs: ["src/**"]
+    blast_radius: ["src/**"]
+    done_check: "grep -q OK src/report.txt"
+    budget_usd: 0.40
