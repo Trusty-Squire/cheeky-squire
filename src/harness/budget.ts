@@ -1,4 +1,7 @@
 import type { ChainsFile } from "../contract/schema.js";
+import { priceUsd } from "../llm/pricing.js";
+
+export { priceUsd };
 
 export interface ChargeResult {
   costUsd: number;
@@ -10,23 +13,6 @@ export interface ChargeResult {
   globalExceeded: boolean;
   /** True if the slug had no price entry (cost counted as 0). */
   unpricedModel: boolean;
-}
-
-/**
- * USD cost for a single LLM call. Prices are per MILLION tokens
- * (chains.yaml). Missing slug → 0 (price is user-maintained config;
- * we never invent one).
- */
-export function priceUsd(
-  prices: ChainsFile["prices"],
-  slug: string,
-  inTokens: number,
-  outTokens: number,
-): { costUsd: number; priced: boolean } {
-  const p = prices[slug];
-  if (!p) return { costUsd: 0, priced: false };
-  const costUsd = (inTokens / 1_000_000) * p.in + (outTokens / 1_000_000) * p.out;
-  return { costUsd, priced: true };
 }
 
 /**
