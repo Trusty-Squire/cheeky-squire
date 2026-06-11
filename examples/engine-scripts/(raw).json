@@ -1,0 +1,29 @@
+{
+  "steps": [
+    { "text": "Raw mode: I have only the goal and a file listing. Building config -> compute -> report myself." },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/config.json",
+        "content": "{\n  \"name\": \"squire\",\n  \"factor\": 2\n}\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/sum.js",
+        "content": "function sum(a, b) {\n  return a + b;\n}\nmodule.exports = { sum };\n"
+      }
+    },
+    {
+      "tool": "write",
+      "args": {
+        "path": "src/report.txt",
+        "content": "OK\nassembled in raw mode: name=squire factor=2 sum(2,3)=5\n"
+      }
+    },
+    { "tool": "bash", "args": { "command": "node checks/config.js && node checks/compute.js && grep -q OK src/report.txt" } },
+    { "usage": { "in": 1800, "out": 300 } },
+    { "done": "Built src/config.json, src/sum.js, and src/report.txt and verified all three checks pass." }
+  ]
+}

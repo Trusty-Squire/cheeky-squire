@@ -11,6 +11,11 @@ chains:
     executor: "anthropic/claude-opus-4"
     fallback: "anthropic/claude-opus-4"
     knight: "anthropic/claude-opus-4"
+  cheap-raw: # ablation: cheap executor with the harness OFF (one raw, goal-only attempt)
+    executor: "qwen/qwen3-coder"
+    fallback: "qwen/qwen3-coder"
+    knight: "qwen/qwen3-coder"
+    harness: "off"
 prices: # per million tokens (in = prompt, out = completion)
   "qwen/qwen3-coder": { in: 0.30, out: 1.00 }
   "deepseek/deepseek-chat": { in: 0.20, out: 0.80 }

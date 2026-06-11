@@ -152,6 +152,9 @@ export function summarize(events: TraceEvent[]): {
       }
       continue;
     }
+    // Synthetic run-phase nodes (e.g. raw mode's "(raw)") are wrapped in
+    // parens — real node ids never are — and are not scored rows.
+    if (/^\(.*\)$/.test(ev.nodeId)) continue;
     const s = ensure(ev.nodeId);
     s.costUsd = Math.max(s.costUsd, ev.costUsdSoFar);
     if (typeof ev.rung === "number") s.maxRung = Math.max(s.maxRung, ev.rung);

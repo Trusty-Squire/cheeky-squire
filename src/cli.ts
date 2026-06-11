@@ -88,7 +88,7 @@ function loadChains(missionDir: string, explicit?: string): { chains: ChainsFile
 }
 
 async function cmdRun(args: string[]): Promise<number> {
-  const flags = parseFlags(args, ["chain", "chains"]);
+  const flags = parseFlags(args, ["chain", "chains", "harness"]);
   const missionPath = flags.positional[0];
   if (!missionPath) throw new SquireError("USAGE", "squire run <mission.yaml> [--mock]");
   const missionAbs = resolve(missionPath);
@@ -136,11 +136,19 @@ async function cmdRun(args: string[]): Promise<number> {
     engine = new PiEngine();
   }
 
+  // Resolve harness mode: --harness <on|off> overrides the chain's setting.
+  const harnessFlag = flags.value.get("harness");
+  if (harnessFlag && harnessFlag !== "on" && harnessFlag !== "off") {
+    throw new SquireError("USAGE", `--harness must be "on" or "off" (got "${harnessFlag}")`);
+  }
+  const harnessMode = (harnessFlag as "on" | "off" | undefined) ?? chain.harness;
+
   // Four-line readback (SPEC §8 style, applied to run as well).
   process.stdout.write(
     [
       `goal:    ${mission.goal}`,
       `chain:   ${chainName} (executor=${chain.executor}, knight=${chain.knight})`,
+      `harness: ${harnessMode}${harnessMode === "off" ? " (ablation: raw, goal-only)" : ""}`,
       `budget:  $${mission.budget_usd}  over ${mission.nodes.length} node(s)`,
       `workdir: ${workdir}${sandboxed ? " (sandbox copy)" : ""}`,
       "",
@@ -155,6 +163,7 @@ async function cmdRun(args: string[]): Promise<number> {
     missionId,
     tracePath,
     chainNameOverride: chainName,
+    harnessMode,
     apiKey: process.env.OPENROUTER_API_KEY,
     baseUrl: process.env.OPENROUTER_BASE_URL,
     log: (line) => process.stdout.write(line + "\n"),

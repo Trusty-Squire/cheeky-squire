@@ -76,6 +76,12 @@ export async function dirtyFiles(cwd: string): Promise<string[]> {
   return files.sort();
 }
 
+/** Tracked files in the repo (for the raw-mode repo listing). */
+export async function listFiles(cwd: string): Promise<string[]> {
+  const out = await git(cwd, ["ls-files"]);
+  return out.split("\n").map((s) => s.trim()).filter(Boolean);
+}
+
 /** True if the working tree has no changes. */
 export async function isClean(cwd: string): Promise<boolean> {
   const result = await execa("git", ["status", "--porcelain"], { cwd, reject: true });

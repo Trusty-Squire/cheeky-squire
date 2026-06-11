@@ -1,4 +1,4 @@
-import type { ChainsFile, Mission, MissionNode } from "../contract/schema.js";
+import type { ChainsFile, Mission } from "../contract/schema.js";
 import { resolveChain, topoSort } from "../contract/schema.js";
 import type { Engine, AttemptRecord, ToolCallRecord, ToolName } from "../engine/types.js";
 import { Trace } from "./trace.js";
@@ -14,6 +14,7 @@ import {
   changedFilesSince,
   diffSince,
   addGitExclude,
+  listFiles,
 } from "./checkpoint.js";
 
 /** Executor system prompt — Appendix B, verbatim. */
@@ -62,6 +63,8 @@ export interface RunMissionOptions {
   gateTimeoutMs?: number;
   now?: () => number;
   log?: (line: string) => void;
+  /** Override the chain's harness mode. "off" runs the ablation (raw, goal-only). */
+  harnessMode?: "on" | "off";
 }
 
 /**
@@ -74,6 +77,14 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
   const gateTimeoutMs = opts.gateTimeoutMs ?? DEFAULT_GATE_TIMEOUT_MS;
   const chainName = opts.chainNameOverride ?? mission.chain;
   const chain = resolveChain(chains, chainName);
+
+  // Ablation: harness OFF runs a single raw, goal-only attempt (no nodes, no
+  // gates mid-run, no checkpoints, no blast radius, no escalation), then scores.
+  const harnessMode = opts.harnessMode ?? chain.harness;
+  if (harnessMode === "off") {
+    return runRaw(opts, chainName, chain.executor);
+  }
+
   const rungs = ladder(chain);
 
   // Keep harness artifacts out of git: never staged by `git add -A`, never
@@ -185,7 +196,7 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
 
       const consumed = await consumeAttempt(engine.runAttempt(req), {
         trace,
-        node,
+        nodeId: node.id,
         rungModel: rung.model,
         rungNumber: rung.rung,
         budget,
@@ -353,17 +364,159 @@ interface ConsumeResult {
  * reconstructed from (tool_call write/edit) + (ok tool_result), keeping the
  * runner engine-agnostic.
  */
+/** Raw mode for the path of least scaffolding. See the harness-off ablation. */
+const RAW_NODE_ID = "(raw)";
+
+/**
+ * Ablation runner (harness OFF). One raw attempt: the model gets ONLY the
+ * mission goal + a repo file listing + the executor system prompt, the four
+ * tools, and the GLOBAL budget hard-stop. No fresh-context nodes, no per-node
+ * gates mid-run, no checkpoints, no blast radius, no escalation. When it ends
+ * (done or budget), every node's done_check is executed and counted; the same
+ * trace event shapes are emitted so experiment.ts consumes both modes uniformly.
+ */
+async function runRaw(
+  opts: RunMissionOptions,
+  chainName: string,
+  executorSlug: string,
+): Promise<MissionResult> {
+  const { mission, chains, engine, workdir, missionId, tracePath } = opts;
+  const log = opts.log ?? (() => {});
+  const gateTimeoutMs = opts.gateTimeoutMs ?? DEFAULT_GATE_TIMEOUT_MS;
+
+  addGitExclude(workdir, [".squire/", ".squire"]);
+  const trace = new Trace(tracePath, missionId, { now: opts.now });
+  const budget = new BudgetMeter(chains.prices, mission.budget_usd);
+  budget.beginNode(mission.budget_usd);
+
+  trace.append("mission_start", {
+    payload: { goal: mission.goal, chain: chainName, budgetUsd: mission.budget_usd, workdir, mode: "raw" },
+    costUsdSoFar: 0,
+  });
+
+  const listing = await listFiles(workdir);
+  const goalPrompt = [
+    `GOAL:\n${mission.goal}`,
+    "",
+    "You are working in a git repository. These files exist:",
+    listing.map((f) => `  ${f}`).join("\n"),
+    "",
+    "Complete the goal. Decompose it yourself. Use read/write/edit/bash to make",
+    "and verify your changes. There are no further instructions and no other steps;",
+    "do everything the goal requires, then stop.",
+  ].join("\n");
+
+  const req = {
+    systemPrompt: EXECUTOR_SYSTEM_PROMPT,
+    brief: goalPrompt,
+    files: [],
+    cwd: workdir,
+    model: { slug: executorSlug, apiKey: opts.apiKey, baseUrl: opts.baseUrl },
+    tools: { blastRadius: ["**"] }, // no blast radius in raw mode
+    maxTokens: 40_000,
+    nodeId: RAW_NODE_ID,
+    rung: 1,
+  };
+
+  trace.append("node_start", {
+    nodeId: RAW_NODE_ID,
+    attempt: 1,
+    rung: 1,
+    payload: { model: executorSlug, mode: "raw" },
+    costUsdSoFar: 0,
+  });
+
+  const consumed = await consumeAttempt(engine.runAttempt(req), {
+    trace,
+    nodeId: RAW_NODE_ID,
+    rungModel: executorSlug,
+    rungNumber: 1,
+    budget,
+  });
+
+  if (consumed.globalBudgetExceeded) {
+    trace.append("budget_stop", {
+      nodeId: RAW_NODE_ID,
+      rung: 1,
+      payload: { scope: "global", globalUsd: budget.globalSpent(), capUsd: mission.budget_usd },
+      costUsdSoFar: budget.globalSpent(),
+    });
+    log(`raw: global budget cap $${mission.budget_usd} hit; scoring partial state`);
+  }
+
+  // Scoring: execute every node's done_check against the final working tree.
+  const committed = new Set<string>();
+  const outcomes: NodeOutcome[] = [];
+  for (const node of mission.nodes) {
+    const gate = await runGate(node.done_check, workdir, gateTimeoutMs);
+    trace.append("gate", {
+      nodeId: node.id,
+      rung: 1,
+      payload: {
+        command: gate.command,
+        exitCode: gate.exitCode,
+        passed: gate.passed,
+        timedOut: gate.timedOut,
+        stdoutTail: gate.stdoutTail,
+        stderrTail: gate.stderrTail,
+        mode: "raw_score",
+      },
+      costUsdSoFar: budget.globalSpent(),
+    });
+    outcomes.push({
+      nodeId: node.id,
+      passed: gate.passed,
+      attempts: 1,
+      maxRung: 1,
+      blastDenied: 0,
+      confabulations: 0,
+      costUsd: 0,
+      gateExitCode: gate.exitCode,
+    });
+    if (gate.passed) {
+      committed.add(node.id);
+      trace.append("node_pass", { nodeId: node.id, rung: 1, costUsdSoFar: budget.globalSpent() });
+      log(`raw score: ${node.id} PASS`);
+    } else {
+      trace.append("node_fail", {
+        nodeId: node.id,
+        rung: 1,
+        payload: { gateExitCode: gate.exitCode },
+        costUsdSoFar: budget.globalSpent(),
+      });
+      log(`raw score: ${node.id} fail (gate exit ${gate.exitCode})`);
+    }
+  }
+
+  const completed = committed.size === mission.nodes.length;
+  trace.append("mission_end", {
+    payload: { completed, halted: false, mode: "raw", committed: [...committed], nodeCount: mission.nodes.length },
+    costUsdSoFar: budget.globalSpent(),
+  });
+
+  return {
+    missionId,
+    completed,
+    halted: false,
+    haltReason: completed ? undefined : "raw mode: not all node checks passed",
+    nodes: outcomes,
+    committedNodeIds: [...committed],
+    totalCostUsd: budget.globalSpent(),
+    tracePath,
+  };
+}
+
 async function consumeAttempt(
   stream: AsyncIterable<import("../engine/types.js").EngineEvent>,
   ctx: {
     trace: Trace;
-    node: MissionNode;
+    nodeId: string;
     rungModel: string;
     rungNumber: number;
     budget: BudgetMeter;
   },
 ): Promise<ConsumeResult> {
-  const { trace, node, rungModel, rungNumber, budget } = ctx;
+  const { trace, nodeId, rungModel, rungNumber, budget } = ctx;
   const pending = new Map<string, ToolCallRecord>();
   const toolCalls: ToolCallRecord[] = [];
   const denied = new Set<string>();
@@ -395,7 +548,7 @@ async function consumeAttempt(
         pending.set(ev.id, rec);
         toolCalls.push(rec);
         trace.append("tool_call", {
-          nodeId: node.id,
+          nodeId: nodeId,
           rung: rungNumber,
           payload: { id: ev.id, name: ev.name, path: rec.path, command: rec.command },
           costUsdSoFar: budget.globalSpent(),
@@ -408,7 +561,7 @@ async function consumeAttempt(
         const rec = pending.get(ev.id);
         if (rec) rec.denied = true;
         trace.append("blast_denied", {
-          nodeId: node.id,
+          nodeId: nodeId,
           rung: rungNumber,
           payload: { id: ev.id, name: ev.name, path: ev.path, reason: ev.reason },
           costUsdSoFar: budget.globalSpent(),
@@ -423,7 +576,7 @@ async function consumeAttempt(
           rec.denied = rec.denied || denied.has(ev.id);
         }
         trace.append("tool_result", {
-          nodeId: node.id,
+          nodeId: nodeId,
           rung: rungNumber,
           payload: { id: ev.id, ok: ev.ok, outputTail: tail(ev.output) },
           costUsdSoFar: budget.globalSpent(),
@@ -435,7 +588,7 @@ async function consumeAttempt(
         outTokens += ev.outTokens;
         const charge = budget.charge(rungModel, ev.inTokens, ev.outTokens);
         trace.append("usage", {
-          nodeId: node.id,
+          nodeId: nodeId,
           rung: rungNumber,
           payload: {
             model: rungModel,

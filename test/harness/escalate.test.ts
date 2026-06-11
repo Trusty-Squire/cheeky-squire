@@ -5,6 +5,7 @@ const chain = {
   executor: "qwen/qwen3-coder",
   fallback: "deepseek/deepseek-chat",
   knight: "anthropic/claude-opus-4",
+  harness: "on" as const,
 };
 
 describe("ladder", () => {

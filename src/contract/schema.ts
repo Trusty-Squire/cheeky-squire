@@ -85,6 +85,8 @@ export const ChainSchema = z
     executor: z.string().min(1),
     fallback: z.string().min(1),
     knight: z.string().min(1),
+    /** "off" runs the ablation: one raw attempt, goal-only, no harness scaffolding. */
+    harness: z.enum(["on", "off"]).default("on"),
   })
   .strict();
 
