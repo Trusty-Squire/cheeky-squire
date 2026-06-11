@@ -10,7 +10,7 @@ nodes:
       and no longer export compute. Verify with the done_check.
     context_globs: ["src/**"]
     blast_radius: ["src/**"]
-    done_check: "node -e \"const c=require('./src/calculate.js'); process.exit(typeof c.evaluate==='function' && c.compute===undefined ? 0 : 1)\""
+    done_check: "node -e \"const c=require('./src/calculate.js'); process.exit(typeof c.evaluate==='function' && c.compute===undefined && c.evaluate(2,3)===5 && c.evaluate(10,20)===30 ? 0 : 1)\""
     budget_usd: 0.50
 
   - id: update-callers
@@ -20,7 +20,7 @@ nodes:
     deps: [rename-def]
     context_globs: ["src/**"]
     blast_radius: ["src/**"]
-    done_check: "node -e \"const {runAll}=require('./src/runner.js'); process.exit(JSON.stringify(runAll([[1,1],[2,3]]))==='[2,5]' ? 0 : 1)\""
+    done_check: "node -e \"const {runAll}=require('./src/runner.js'); process.exit(JSON.stringify(runAll([[1,1],[2,3]]))==='[2,5]' && JSON.stringify(runAll([[10,20],[4,5]]))==='[30,9]' ? 0 : 1)\""
     budget_usd: 0.50
 
   - id: reexport-and-compile

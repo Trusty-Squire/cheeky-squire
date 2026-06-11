@@ -1,4 +1,13 @@
-import { readFileSync, existsSync, readdirSync, cpSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  readFileSync,
+  existsSync,
+  readdirSync,
+  cpSync,
+  mkdtempSync,
+  rmSync,
+  mkdirSync,
+  copyFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { parseMission, type ChainsFile } from "../contract/schema.js";
@@ -54,6 +63,8 @@ export interface TaskMetrics {
   wallSeconds: number;
   costUsd: number;
   haltReason?: string;
+  /** Path to the archived JSONL trace for this run (results/<runId>/<task>-<chain>.jsonl). */
+  traceArchive?: string;
 }
 
 export interface RunTaskOptions {
@@ -65,6 +76,9 @@ export interface RunTaskOptions {
   baseUrl?: string;
   now?: () => number;
   keepTemp?: boolean;
+  /** When set, the per-run trace is archived to <resultsDir>/<runId>/<task>-<chain>.jsonl. */
+  runId?: string;
+  resultsDir?: string;
 }
 
 /** Run one task on one chain in an isolated temp git repo (SPEC §12). */
@@ -104,6 +118,15 @@ export async function runTask(opts: RunTaskOptions): Promise<TaskMetrics> {
     const confabulations = summary.nodes.reduce((s, n) => s + n.confabulations, 0);
     const blastDenied = summary.nodes.reduce((s, n) => s + n.blastDenied, 0);
 
+    // Archive the trace before the temp dir is reaped (findings need it).
+    let traceArchive: string | undefined;
+    if (opts.runId && opts.resultsDir) {
+      const dir = join(opts.resultsDir, opts.runId);
+      mkdirSync(dir, { recursive: true });
+      traceArchive = join(dir, `${task.name}-${chainName}.jsonl`);
+      copyFileSync(tracePath, traceArchive);
+    }
+
     return {
       taskNum: task.num,
       task: task.name,
@@ -118,6 +141,7 @@ export async function runTask(opts: RunTaskOptions): Promise<TaskMetrics> {
       wallSeconds: (Date.now() - startedAt) / 1000,
       costUsd: result.totalCostUsd,
       haltReason: result.haltReason,
+      traceArchive,
     };
   } finally {
     if (!opts.keepTemp) {

@@ -10,7 +10,7 @@ nodes:
       done_check command.
     context_globs: ["src/**"]
     blast_radius: ["src/**"]
-    done_check: "node -e \"const c=require('./src/calc.js'); process.exit(c.multiply(3,4)===12 && c.multiply(0,5)===0 && c.add(1,1)===2 ? 0 : 1)\""
+    done_check: "node -e \"const c=require('./src/calc.js'); process.exit(c.multiply(3,4)===12 && c.multiply(0,5)===0 && c.multiply(6,7)===42 && c.multiply(-3,3)===-9 && c.add(1,1)===2 ? 0 : 1)\""
     budget_usd: 0.50
 
   - id: test-multiply
@@ -21,5 +21,5 @@ nodes:
     deps: [impl-multiply]
     context_globs: ["src/**", "test/**"]
     blast_radius: ["test/**"]
-    done_check: "node --test test/multiply.test.js && grep -q multiply test/multiply.test.js"
+    done_check: "grep -q multiply test/multiply.test.js && bash checks/mutation-guard.sh src/calc.js checks/calc.mutant.js 'node --test test/multiply.test.js'"
     budget_usd: 0.50

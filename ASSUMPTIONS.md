@@ -88,6 +88,19 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   run by the human with OPENROUTER_API_KEY (SPEC §12). `--dry-run` validates all
   fixtures+missions and prints the table schema (gate 5).
 
+## Anti-gaming (v0.1.1)
+- A21. Three reusable gate primitives keep done_checks ungameable:
+  (1) behavior gates assert ≥2 varied input/output pairs so a constant or
+  small-branch hardcode fails; (2) tests-first nodes require the suite to FAIL
+  against the stub (`! node --test …`) so a vacuous test can't let a later node
+  ship a stub; (3) write-test-after-impl nodes use `fixture/checks/mutation-guard.sh`
+  — the new test must pass against the real module and FAIL against a planted
+  mutant in `fixture/checks/<mod>.mutant.js`. Mutants and the guard live in
+  `checks/` (outside every blast_radius) so no node can tamper with them.
+- A22. experiment.ts archives each run's trace to
+  `results/<runId>/<task>-<chain>.jsonl` before the temp workdir is reaped
+  (results/ is gitignored; archiving is the audit trail).
+
 ## CLI
 - A17. Commands: `run <mission> [--mock] [--chain <name>]`,
   `derive "<goal>" [--yes] [--chain <name>]`, `trace <file>`,

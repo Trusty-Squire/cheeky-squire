@@ -12,11 +12,13 @@ nodes:
       Write test/cart.test.js (node:test + node:assert) that imports total
       from ../src/cart.js and encodes the SPEC: a subtotal of 50 stays 50,
       and a subtotal of 120 becomes 108 (10% discount). Use the word
-      "discount" in a test name. The implementation does not exist yet, so the
-      gate only checks the file parses and encodes the discount.
+      "discount" in a test name. The implementation does not exist yet (the stub
+      throws), so the tests MUST call total and assert real values — the gate
+      requires the suite to FAIL against the current stub (a vacuous test that
+      passes is rejected).
     context_globs: ["src/**"]
     blast_radius: ["test/**"]
-    done_check: "node --check test/cart.test.js && grep -q discount test/cart.test.js"
+    done_check: "node --check test/cart.test.js && grep -q discount test/cart.test.js && ! node --test test/cart.test.js"
     budget_usd: 0.50
 
   - id: implement
@@ -38,5 +40,5 @@ nodes:
     deps: [implement]
     context_globs: ["src/**", "test/**"]
     blast_radius: ["test/**"]
-    done_check: "node --test test/boundary.test.js && grep -q 100 test/boundary.test.js"
+    done_check: "grep -q 100 test/boundary.test.js && bash checks/mutation-guard.sh src/cart.js checks/cart.mutant.js 'node --test test/boundary.test.js'"
     budget_usd: 0.50

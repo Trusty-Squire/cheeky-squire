@@ -78,17 +78,20 @@ async function main(argv: string[]): Promise<number> {
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
+  const runId = `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const resultsDir = join(ROOT, "results");
   const rows: TaskMetrics[] = [];
   for (const task of tasks) {
     for (const chainName of chainNames) {
       process.stdout.write(`\n=== ${task.name} x ${chainName}${mock ? " (mock)" : ""} ===\n`);
-      const m = await runTask({ task, chainName, chains, mock, apiKey });
+      const m = await runTask({ task, chainName, chains, mock, apiKey, runId, resultsDir });
       rows.push(m);
       process.stdout.write(
         `  completed=${m.completed} nodes=${m.nodesPassed}/${m.nodesTotal} escalated=${m.escalatedNodes} cost=$${m.costUsd.toFixed(4)}\n`,
       );
     }
   }
+  process.stdout.write(`\ntraces archived under ${join(resultsDir, runId)}/\n`);
 
   printTable(rows);
   const csvPath = writeCsv(rows);

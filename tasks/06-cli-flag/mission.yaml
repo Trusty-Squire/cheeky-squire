@@ -10,7 +10,7 @@ nodes:
       Keep --name working. Verify with the done_check command.
     context_globs: ["src/**"]
     blast_radius: ["src/**"]
-    done_check: "node -e \"const {parseArgs}=require('./src/args.js'); const a=parseArgs(['--shout']); const b=parseArgs([]); process.exit(a.shout===true && b.shout===false ? 0 : 1)\""
+    done_check: "node -e \"const {parseArgs}=require('./src/args.js'); const a=parseArgs(['--shout']); const b=parseArgs([]); const c=parseArgs(['--name','x']); const d=parseArgs(['--name','x','--shout']); process.exit(a.shout===true && b.shout===false && c.shout===false && d.shout===true && c.name==='x' ? 0 : 1)\""
     budget_usd: 0.50
 
   - id: apply-flag
@@ -21,7 +21,7 @@ nodes:
     deps: [parse-flag]
     context_globs: ["src/**"]
     blast_radius: ["src/**"]
-    done_check: "node -e \"const {run}=require('./src/greet.js'); process.exit(run(['--shout','--name','Ada'])==='HELLO, ADA!' && run(['--name','Ada'])==='Hello, Ada!' ? 0 : 1)\""
+    done_check: "node -e \"const {run}=require('./src/greet.js'); process.exit(run(['--shout','--name','Ada'])==='HELLO, ADA!' && run(['--name','Ada'])==='Hello, Ada!' && run(['--shout','--name','bo'])==='HELLO, BO!' && run([])==='Hello, world!' ? 0 : 1)\""
     budget_usd: 0.50
 
   - id: test-flag
@@ -32,5 +32,5 @@ nodes:
     deps: [parse-flag, apply-flag]
     context_globs: ["src/**", "test/**"]
     blast_radius: ["test/**"]
-    done_check: "node --test test/shout.test.js && grep -q shout test/shout.test.js"
+    done_check: "grep -q shout test/shout.test.js && bash checks/mutation-guard.sh src/greet.js checks/greet.mutant.js 'node --test test/shout.test.js'"
     budget_usd: 0.50

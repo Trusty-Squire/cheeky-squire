@@ -23,5 +23,5 @@ nodes:
     deps: [fix-bug]
     context_globs: ["src/**", "test/**"]
     blast_radius: ["test/**"]
-    done_check: "node --test test/regression.test.js && grep -q transform test/regression.test.js"
+    done_check: "grep -q transform test/regression.test.js && bash checks/mutation-guard.sh src/transform.js checks/transform.mutant.js 'node --test test/regression.test.js'"
     budget_usd: 0.50
