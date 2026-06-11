@@ -15,9 +15,11 @@ const TASKS_ROOT = join(ROOT, "tasks");
 const chains = parseChains(readFileSync(join(ROOT, "chains.yaml"), "utf8"));
 
 describe("benchmark task suite", () => {
-  it("discovers all ten tasks, ordered", () => {
+  it("discovers all twenty tasks, ordered", () => {
     const tasks = discoverTasks(TASKS_ROOT);
-    expect(tasks.map((t) => t.num)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(tasks.map((t) => t.num)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+    ]);
   });
 
   it("every task validates (fixture, mission, engine-scripts present)", () => {
