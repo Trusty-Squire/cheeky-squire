@@ -1,0 +1,81 @@
+import { makeMatcher } from "./globs.js";
+import type { AttemptRecord } from "../engine/types.js";
+
+export interface ReconcileResult {
+  /** Hard reconcile violations (deterministic, no LLM). Non-empty = reconcile failed. */
+  violations: string[];
+  /** Writes the engine claims it executed but that do not appear in the git diff. */
+  missingFromDiff: string[];
+  /** Files changed in the tree that fall outside blast_radius. */
+  outOfRadius: string[];
+  /** Confabulation: claimed a check ran with no matching bash call. Counted, never fails the node. */
+  confabulation: boolean;
+}
+
+/** Phrases in a final message that claim a check/test/build was run. */
+const CLAIM_RE =
+  /\b(test|tests|vitest|jest|lint|eslint|typecheck|tsc|build|compiled?|suite|passing|passes|green|exit 0|exited 0)\b/i;
+
+/** A bash command that looks like it runs a check. */
+const CHECK_CMD_RE =
+  /\b(test|vitest|jest|lint|eslint|tsc|typecheck|build|pnpm|npm|yarn|node|make|cargo|go test|pytest)\b/i;
+
+/**
+ * RECONCILING: deterministic checks, no LLM (SPEC §5.5).
+ *  - every write/edit the engine executed appears in `git diff`
+ *  - no diff outside blast_radius
+ *  - confabulation flag if the final message claims a check ran but no
+ *    matching bash tool call exists (counted, never fails the node)
+ */
+export function reconcile(opts: {
+  blastRadius: string[];
+  doneCheck: string;
+  changedFiles: string[];
+  record: AttemptRecord;
+}): ReconcileResult {
+  const { blastRadius, doneCheck, changedFiles, record } = opts;
+  const inRadius = makeMatcher(blastRadius);
+  const violations: string[] = [];
+
+  // 1. Every executed write must appear in the working-tree diff.
+  const changedSet = new Set(changedFiles.map(norm));
+  const missingFromDiff = unique(record.executedWrites.map(norm)).filter(
+    (p) => !changedSet.has(p),
+  );
+  for (const p of missingFromDiff) {
+    violations.push(`engine wrote "${p}" but it does not appear in git diff`);
+  }
+
+  // 2. No change outside blast_radius.
+  const outOfRadius = changedFiles.map(norm).filter((p) => !inRadius(p));
+  for (const p of outOfRadius) {
+    violations.push(`changed file "${p}" is outside blast_radius`);
+  }
+
+  // 3. Confabulation: claimed a check, but no bash call ran one.
+  const claimedCheck = CLAIM_RE.test(record.finalMessage);
+  const ranCheck = record.toolCalls.some(
+    (tc) =>
+      tc.name === "bash" &&
+      !tc.denied &&
+      typeof tc.command === "string" &&
+      (commandMatchesDoneCheck(tc.command, doneCheck) || CHECK_CMD_RE.test(tc.command)),
+  );
+  const confabulation = claimedCheck && !ranCheck;
+
+  return { violations, missingFromDiff, outOfRadius, confabulation };
+}
+
+function commandMatchesDoneCheck(command: string, doneCheck: string): boolean {
+  const a = command.trim();
+  const b = doneCheck.trim();
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+function norm(p: string): string {
+  return p.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function unique(xs: string[]): string[] {
+  return [...new Set(xs)];
+}
