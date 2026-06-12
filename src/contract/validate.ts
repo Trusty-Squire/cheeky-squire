@@ -1,8 +1,11 @@
 import { parseMission, parseChains, resolveChain } from "./schema.js";
 import { SquireError } from "../errors.js";
-import * as fs from "fs";
-import * as path from "path";
-import * as fg from "fast-glob";
+import * as fs from "node:fs";
+import * as path from "node:path";
+// Default import, NOT namespace: fast-glob is CJS, and `import * as fg` works
+// under vitest's interop but yields a namespace without callable members in the
+// compiled ESM dist (this exact divergence shipped a latent runtime bug).
+import fg from "fast-glob";
 
 export interface ValidationIssue {
   level: "error" | "warn";
