@@ -132,7 +132,7 @@ async function jsonStage<S extends z.ZodTypeAny>(
   throw new SquireError("DERIVE_STAGE_INVALID", `stage "${stage}" produced invalid output after one retry`);
 }
 
-const LENSES: { id: string; instruction: string }[] = [
+export const LENSES: { id: string; instruction: string }[] = [
   {
     id: "feasibility-arithmetic",
     instruction:

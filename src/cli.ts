@@ -28,6 +28,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdDo(rest);
     case "fix":
       return cmdFix(rest);
+    case "spec":
+      return cmdSpec(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -51,6 +53,7 @@ function printUsage(): void {
       "  ser trace <trace.jsonl>",
       "  ser do \"<goal>\" [--gate <cmd>] [--radius <glob>] [--budget <usd>]",
       "  ser fix \"<bug>\" [--test-cmd <cmd>] [--test-file <path>]",
+      "  ser spec init|check|verify|talk <x.spec.yaml> [...]",
       "  ser validate <mission.yaml> [--chains <file>]",
       "  ser experiment [-- <experiment args>]",
       "",
@@ -230,6 +233,103 @@ async function cmdFix(args: string[]): Promise<number> {
     chain: flags.value.get("chain"),
   });
   return executeMissionObject(mission, workdir, flags, "fix");
+}
+
+async function cmdSpec(args: string[]): Promise<number> {
+  const sub = args[0];
+  const { parseSpec } = await import("./contract/spec.js");
+  const { checkSpec, verifyClaim, SpecSession } = await import("./contract/spec-session.js");
+  const { stringify } = await import("yaml");
+  const { writeFileSync: wf } = await import("node:fs");
+
+  if (sub === "init") {
+    const flags = parseFlags(args.slice(1), ["thesis"]);
+    const file = flags.positional[0];
+    if (!file) throw new SquireError("USAGE", 'ser spec init <name.spec.yaml> --thesis "<one paragraph>"');
+    if (existsSync(resolve(file))) throw new SquireError("SPEC_EXISTS", `${file} already exists`);
+    wf(
+      resolve(file),
+      stringify({
+        thesis: flags.value.get("thesis") ?? "TODO: one paragraph — pinned; drift is flagged against this",
+        scope_fence: [],
+        requirements: [{ id: "R1", statement: "TODO", acceptance: { tier: 0 } }],
+        decisions: [],
+        claims: [],
+        open_questions: [{ id: "Q1", text: "what is the first requirement's objective check?", blocking: true }],
+      }),
+    );
+    process.stdout.write(`initialized ${file} — talk with: ser spec talk ${file}\n`);
+    return 0;
+  }
+
+  if (sub === "check") {
+    const file = args[1];
+    if (!file) throw new SquireError("USAGE", "ser spec check <x.spec.yaml>");
+    const spec = parseSpec(readFileSync(resolve(file), "utf8"), file);
+    const { ok, lines } = checkSpec(spec);
+    process.stdout.write(lines.join("\n") + "\n");
+    return ok ? 0 : 1;
+  }
+
+  if (sub === "verify") {
+    const flags = parseFlags(args.slice(1), ["chain", "chains"]);
+    const [file, claimId] = flags.positional;
+    if (!file || !claimId) throw new SquireError("USAGE", "ser spec verify <x.spec.yaml> <claim-id>");
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser spec verify");
+    const { OpenRouterClient } = await import("./llm/openrouter.js");
+    const { loadChainsForDerive } = await import("./contract/derive.js");
+    const chains = loadChainsForDerive(process.cwd(), flags.value.get("chains"));
+    const chain = resolveChain(chains, flags.value.get("chain") ?? "cheap");
+    const spec = parseSpec(readFileSync(resolve(file), "utf8"), file);
+    const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
+    const r = await verifyClaim(spec, claimId, llm, chain.executor);
+    wf(resolve(file), stringify(r.spec));
+    process.stdout.write(`${claimId}: ${r.verdict}\n  ${r.evidence}\n`);
+    return r.verdict === "verified" ? 0 : 1;
+  }
+
+  if (sub === "talk") {
+    const flags = parseFlags(args.slice(1), ["chain", "chains"]);
+    const file = flags.positional[0];
+    if (!file) throw new SquireError("USAGE", "ser spec talk <x.spec.yaml>");
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser spec talk");
+    const { OpenRouterClient } = await import("./llm/openrouter.js");
+    const { loadChainsForDerive } = await import("./contract/derive.js");
+    const chains = loadChainsForDerive(process.cwd(), flags.value.get("chains"));
+    const chain = resolveChain(chains, flags.value.get("chain") ?? "cheap");
+    const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
+    const session = new SpecSession({
+      path: resolve(file),
+      llm,
+      executorModel: chain.executor,
+      knightModel: chain.knight,
+    });
+    process.stdout.write("ser spec — the spec is the state; this conversation is disposable. empty line to exit.\n");
+    for (;;) {
+      const msg = (await ask("you> ")).trim();
+      if (!msg) return 0;
+      const batch = await session.turn(msg);
+      for (const d of batch.deltas) {
+        process.stdout.write(`  Δ ${d.section}.${d.op}${d.id ? " " + d.id : ""}${d.drift ? "  ⚠ drift vs thesis" : ""}\n`);
+        if (d.value) process.stdout.write(`      ${JSON.stringify(d.value).slice(0, 140)}\n`);
+      }
+      if (batch.note) process.stdout.write(`  ${batch.note}\n`);
+      if (batch.question) process.stdout.write(`  ? ${batch.question}\n`);
+      if (batch.deltas.length === 0) continue;
+      const a = (await ask("  apply? [y/N] ")).trim();
+      if (/^y/i.test(a)) {
+        await session.accept(batch);
+        process.stdout.write("  applied + committed\n");
+      } else {
+        session.reject();
+        process.stdout.write(`  rejected (next turn on ${session.currentModel()})\n`);
+      }
+    }
+  }
+
+  throw new SquireError("USAGE", "ser spec init|check|verify|talk <x.spec.yaml>");
 }
 
 async function cmdTrace(args: string[]): Promise<number> {
