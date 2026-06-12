@@ -194,8 +194,9 @@ async function cmdTrace(args: string[]): Promise<number> {
 }
 
 async function cmdDerive(args: string[]): Promise<number> {
-  const { runDerive } = await import("./contract/derive.js");
-  return runDerive(args);
+  // v2 herald pipeline (SPEC-v0.2 §6); v1 remains importable for tests.
+  const { runDeriveV2 } = await import("./contract/derive2.js");
+  return runDeriveV2(args);
 }
 
 async function cmdExperiment(args: string[]): Promise<number> {

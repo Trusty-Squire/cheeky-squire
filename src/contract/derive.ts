@@ -206,7 +206,7 @@ export function detectCheckCommands(workdir: string): string[] {
   return cmds;
 }
 
-function tryParseJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
+export function tryParseJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
   const stripped = stripFences(text);
   try {
     return { ok: true, value: JSON.parse(stripped) };
@@ -226,7 +226,7 @@ function stripFences(text: string): string {
   return trimmed;
 }
 
-function formatZodIssues(issues: z.ZodIssue[]): string {
+export function formatZodIssues(issues: z.ZodIssue[]): string {
   return issues.map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`).join("\n");
 }
 
@@ -288,7 +288,7 @@ export async function runDerive(args: string[]): Promise<number> {
   return 0;
 }
 
-function loadChainsForDerive(workdir: string, explicit?: string): ChainsFile {
+export function loadChainsForDerive(workdir: string, explicit?: string): ChainsFile {
   const candidates = [explicit, join(process.cwd(), "chains.yaml"), join(workdir, "chains.yaml")].filter(
     (p): p is string => Boolean(p),
   );
