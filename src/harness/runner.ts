@@ -262,8 +262,12 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
       });
 
       const nodeBudgetHit = consumed.nodeBudgetExceeded;
-      const nodePass =
-        gate.passed && rec.violations.length === 0 && !record.errored && !nodeBudgetHit;
+      // A node whose gate PASSED is done and verified — commit it even if the
+      // attempt ran over its per-node budget. The per-node cap gates STARTING
+      // another attempt (below), not discarding completed+verified work; the
+      // global cap is the hard mission stop. (Without this, an expensive model
+      // gets cap-killed on work it actually finished.)
+      const nodePass = gate.passed && rec.violations.length === 0 && !record.errored;
 
       if (nodePass) {
         const sha = await commitNode(workdir, node.id);
@@ -279,9 +283,16 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
         trace.append("node_pass", {
           nodeId: node.id,
           rung: rung.rung,
+          // The gate passed but the attempt ran over its per-node budget: we
+          // keep the verified work and flag it (a warning, not a failure).
+          payload: nodeBudgetHit
+            ? { over_budget_committed: true, nodeUsd: budget.nodeSpent(), capUsd: node.budget_usd }
+            : null,
           costUsdSoFar: budget.globalSpent(),
         });
-        log(`node(${node.id}): pass (rung ${rung.rung})`);
+        log(
+          `node(${node.id}): pass (rung ${rung.rung})${nodeBudgetHit ? " [over budget — committed anyway]" : ""}`,
+        );
         break;
       }
 
@@ -304,11 +315,12 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
       });
       log(`node(${node.id}): fail (rung ${rung.rung}, gate exit ${gate.exitCode})`);
 
-      const isLastRung = rung.rung === rungs[rungs.length - 1]!.rung;
-      if (nodeBudgetHit && isLastRung) {
-        // node cap on the last rung — nothing left to escalate to.
+      // The node FAILED its gate. If it also burned its per-node budget, stop
+      // escalating — the next rung would only spend more without a result.
+      if (nodeBudgetHit) {
         break;
       }
+      const isLastRung = rung.rung === rungs[rungs.length - 1]!.rung;
       if (!isLastRung) {
         trace.append("escalate", {
           nodeId: node.id,

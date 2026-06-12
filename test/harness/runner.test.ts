@@ -171,4 +171,50 @@ describe("runMission", () => {
     const kinds = readTrace(result.tracePath).map((e) => e.kind);
     expect(kinds).toContain("budget_stop");
   });
+
+  it("commits a node whose gate PASSED even if it ran over its per-node budget", async () => {
+    // Per-node cap is tiny ($0.0001); global cap is generous ($5). The attempt
+    // spends ~$0.001 (over the node cap, under the global cap) AND passes the gate.
+    const tinyNodeBudget = oneNode.replace("budget_usd: 1", "budget_usd: 0.0001");
+    const result = await run(tinyNodeBudget, () => ({
+      steps: [
+        { usage: { in: 1000, out: 1000 } }, // ~$0.001 > $0.0001 node cap
+        { tool: "edit", args: { path: "src/target.ts", oldString: "v = 0", newString: "v = 1" } },
+        { tool: "bash", args: { command: "bash check.sh" } },
+        { done: "fixed v despite the tiny node budget" },
+      ],
+    }));
+    // The verified work commits; the mission completes (NOT halted, NOT failed).
+    expect(result.completed).toBe(true);
+    expect(result.committedNodeIds).toEqual(["fix"]);
+    expect(result.halted).toBe(false);
+    // The over-budget commit is recorded as a WARNING on node_pass, not a failure.
+    const events = readTrace(result.tracePath);
+    const pass = events.find((e) => e.kind === "node_pass");
+    expect(pass).toBeDefined();
+    expect((pass!.payload as { over_budget_committed?: boolean }).over_budget_committed).toBe(true);
+    // It did NOT escalate (the work was done on the first attempt) and never node-failed.
+    expect(events.some((e) => e.kind === "node_fail")).toBe(false);
+    expect(result.nodes[0]!.maxRung).toBe(1);
+  });
+
+  it("stops escalating a FAILING node once it has burned its per-node budget", async () => {
+    // Tiny node budget, gate never passes — should fail FAST without climbing all
+    // four rungs (the per-node cap guards starting another attempt).
+    const tinyNodeBudget = oneNode.replace("budget_usd: 1", "budget_usd: 0.0001");
+    const result = await run(tinyNodeBudget, () => ({
+      steps: [
+        { usage: { in: 1000, out: 1000 } }, // over the node cap
+        { text: "did nothing useful" },
+        { done: "gave up" },
+      ],
+    }));
+    expect(result.completed).toBe(false);
+    expect(result.halted).toBe(true);
+    // Failed at rung 1 — it did NOT spend three more rungs over budget.
+    expect(result.nodes[0]!.maxRung).toBe(1);
+    const fails = readTrace(result.tracePath).filter((e) => e.kind === "node_fail");
+    expect(fails).toHaveLength(1);
+    expect((fails[0]!.payload as { reason?: string }).reason).toBe("node_budget");
+  });
 });
