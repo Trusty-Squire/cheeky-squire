@@ -1,6 +1,7 @@
 # CLAUDE.md — Castellan (formerly Cheeky Squire) v0.1.x
 
 > Rebranded 2026-06-12: product=Castellan, binary=`ser` (+`castellan` alias),
+> SPEC-v0.2.md is the design authority for the v0.2 planning-layer build;
 > npm package=`castellan`. SPEC.md retains the original v0.1 name and binary
 > as the historical design authority; internal identifiers (.squire/,
 > SquireError) unchanged for now.
