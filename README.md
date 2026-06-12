@@ -71,6 +71,10 @@ pack → run → reconcile → gate → checkpoint for real. Drop `--mock` for a
 If the workdir isn't a git repo it's copied into a throwaway temp repo, so your
 source tree is never mutated. `squire trace <file>` pretty-prints any trace.
 
+### `squire validate` — pre-flight mission validation
+
+`squire validate <mission.yaml>` checks a mission file for errors without spending any tokens or touching external services. It validates the mission schema, verifies referenced chains exist, warns when context_globs match no files, and flags empty blast_radius as an error. This command exits with code 0 when the mission is valid, making it suitable for CI pipelines or pre-run checks. Using squire validate helps catch configuration issues early in the development process before attempting a full mission run.
+
 ### `pnpm experiment` — the benchmark (the whole point)
 
 ```bash

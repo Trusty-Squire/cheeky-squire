@@ -1,0 +1,113 @@
+goal: >
+  Add `squire validate <mission.yaml>` — a pre-flight check that reports
+  mission-file problems (bad schema, unknown chain, globs matching no files,
+  empty blast_radius) before any tokens are spent.
+budget_usd: 2.00
+chain: cheap
+workdir: ".."
+nodes:
+  - id: write-tests
+    brief: >
+      Write a NEW vitest test file at test/contract/validate.test.ts for a
+      module that does not exist yet: src/contract/validate.ts. The module will
+      export a function validateMissionFile(missionPath: string, chainsPath:
+      string) that returns a report object { ok: boolean, issues: Array<{
+      level: "error" | "warn", nodeId?: string, message: string }> }.
+      Semantics to encode in tests: (1) a valid mission file with an existing
+      chain and globs that match files returns ok=true with no error-level
+      issues; (2) a mission whose chain name is not present in the chains file
+      yields ok=false with an error-level issue mentioning the chain name;
+      (3) a node whose context_globs contains a glob matching ZERO files under
+      the mission's workdir yields a warn-level issue naming that node id (warns
+      do NOT make ok false); (4) a node whose blast_radius is an empty array
+      yields ok=false with an error-level issue naming that node; (5) an
+      unparseable mission file (invalid YAML or schema) yields ok=false with at
+      least one error-level issue and must NOT throw. Build test fixtures
+      inside the test using mkdtempSync from node:os/node:fs and writeFileSync
+      (write small mission.yaml and chains.yaml strings, plus dummy files so
+      globs can match). The mission file format: goal (string), budget_usd
+      (number), chain (string), workdir (string, relative to the mission
+      file's directory), nodes (array of { id, brief, deps?, context_globs?,
+      blast_radius (array of globs), done_check (string), budget_usd }).
+      The chains file format: { chains: { <name>: { executor, fallback,
+      knight } }, prices: {...} }. Import with the .js extension exactly like
+      the existing tests do (e.g. import { validateMissionFile } from
+      "../../src/contract/validate.js"). Use describe/it/expect from vitest.
+      The implementation does not exist yet, so this suite MUST currently fail —
+      and it must fail ONLY because src/contract/validate.ts is missing, never
+      because of a broken fixture. In particular: when writing fixture files
+      into nested directories (e.g. <tmp>/src/dummy.txt), you MUST create the
+      directory first with mkdirSync(path, { recursive: true }) before any
+      writeFileSync into it. The gate rejects the node if the suite's failure
+      output contains ENOENT (a fixture crash) instead of the missing-module
+      error.
+    context_globs:
+      - "test/contract/schema.test.ts"
+      - "src/contract/schema.ts"
+    blast_radius: ["test/contract/**"]
+    done_check: "test -f test/contract/validate.test.ts && grep -q validateMissionFile test/contract/validate.test.ts && ! pnpm vitest run test/contract/validate.test.ts > /tmp/dogfood-gate1.txt 2>&1 && grep -q 'Failed to load url' /tmp/dogfood-gate1.txt && ! grep -q ENOENT /tmp/dogfood-gate1.txt"
+    budget_usd: 0.40
+
+  - id: implement
+    brief: >
+      Create src/contract/validate.ts exporting validateMissionFile(
+      missionPath: string, chainsPath: string) that satisfies the existing
+      test suite in test/contract/validate.test.ts (read it — it is the
+      authority on the expected behavior). Reuse the existing modules instead
+      of reimplementing: parseMission and parseChains from ./schema.js throw a
+      SquireError (from ../errors.js) on invalid input — catch it and convert
+      to an error-level issue rather than throwing. To check whether a glob
+      matches any files, use the "fast-glob" package (already a dependency):
+      fg.sync(glob, { cwd: resolvedWorkdir, onlyFiles: true }). Resolve the
+      mission's workdir relative to the directory containing the mission file
+      (path.dirname(missionPath)). Return { ok, issues } where ok is true iff
+      there are no error-level issues. Do not modify the test file. The whole
+      repository must keep typechecking under the strict tsconfig (no any
+      outside validated boundaries, handle undefined from indexed access).
+    deps: [write-tests]
+    context_globs:
+      - "test/contract/validate.test.ts"
+      - "src/contract/schema.ts"
+      - "src/errors.ts"
+    blast_radius: ["src/contract/**"]
+    done_check: "pnpm vitest run test/contract/validate.test.ts && pnpm typecheck && git diff --quiet HEAD -- test/contract/validate.test.ts"
+    budget_usd: 0.60
+
+  - id: wire-cli
+    brief: >
+      Wire a new `validate` subcommand into src/cli.ts following the existing
+      command pattern (see how `trace` and `run` are dispatched in main() and
+      printUsage()). Usage: squire validate <mission.yaml> [--chains <file>].
+      Behavior: resolve the mission path; locate the chains file exactly like
+      cmdRun does (an explicit --chains value, else chains.yaml in the current
+      working directory, else chains.yaml next to the mission file); call
+      validateMissionFile from ./contract/validate.js; print one line per
+      issue prefixed "error:" or "warn:" (include the nodeId when present) and
+      a final summary line; return exit code 0 when the report is ok (warnings
+      alone are fine), 1 otherwise. Add the command to the usage/help text.
+      Keep the whole repo green: the full test suite, typecheck, and lint must
+      pass, and `node dist/cli.js validate examples/demo.yaml` (after a build)
+      must exit 0.
+    deps: [implement]
+    context_globs:
+      - "src/cli.ts"
+      - "src/contract/validate.ts"
+    blast_radius: ["src/**"]
+    done_check: "pnpm vitest run && pnpm typecheck && pnpm lint && pnpm build && node dist/cli.js validate examples/demo.yaml && git diff --quiet HEAD -- test/contract/validate.test.ts"
+    budget_usd: 0.60
+
+  - id: docs
+    brief: >
+      Document the new command. In README.md, in the section describing the
+      `squire run` command (after its paragraph), add a short paragraph (3-5
+      sentences) describing `squire validate <mission.yaml>`: it pre-flights a
+      mission file before any tokens are spent, reporting schema errors,
+      unknown chains, context_globs that match no files (warning), and empty
+      blast_radius (error); exit 0 when valid. Use the literal phrase
+      "squire validate" so readers can find it. Do not change any code.
+    deps: [wire-cli]
+    context_globs:
+      - "README.md"
+    blast_radius: ["README.md"]
+    done_check: "grep -q 'squire validate' README.md && git diff --quiet HEAD -- src && git diff --quiet HEAD -- test && pnpm lint"
+    budget_usd: 0.30

@@ -45,3 +45,6 @@ jobs:
 
       - name: Experiment dry-run — validates 20 fixtures + 3-chain schema (gate 5)
         run: pnpm experiment --dry-run
+
+      - name: Validate smoke on compiled dist (catches vitest-vs-dist ESM interop divergence)
+        run: node dist/cli.js validate missions/squire-validate.yaml | grep -q "0 error(s), 0 warning(s)"

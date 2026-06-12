@@ -9,6 +9,7 @@ import { MockEngine, fileScriptResolver } from "./engine/mock.js";
 import { initRepo, isClean } from "./harness/checkpoint.js";
 import { SquireError } from "./errors.js";
 import type { Engine } from "./engine/types.js";
+import { validateMissionFile } from "./contract/validate.js";
 
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
@@ -21,6 +22,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdDerive(rest);
     case "experiment":
       return cmdExperiment(rest);
+    case "validate":
+      return cmdValidate(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -42,6 +45,7 @@ function printUsage(): void {
       "  squire run <mission.yaml> [--mock] [--chain <name>] [--sandbox]",
       "  squire derive \"<goal>\" [--chain <name>] [--yes] [--out <file>]",
       "  squire trace <trace.jsonl>",
+      "  squire validate <mission.yaml> [--chains <file>]",
       "  squire experiment [-- <experiment args>]",
       "",
     ].join("\n"),
@@ -197,6 +201,35 @@ async function cmdExperiment(args: string[]): Promise<number> {
   const script = resolve(dirname(new URL(import.meta.url).pathname), "..", "scripts", "experiment.ts");
   const result = await execa("npx", ["tsx", script, ...args], { stdio: "inherit", reject: false });
   return result.exitCode ?? 1;
+}
+
+async function cmdValidate(args: string[]): Promise<number> {
+  const flags = parseFlags(args, ["chains"]);
+  const missionPath = flags.positional[0];
+  if (!missionPath) throw new SquireError("USAGE", "squire validate <mission.yaml> [--chains <file>]");
+  
+  const missionAbs = resolve(missionPath);
+  if (!existsSync(missionAbs)) throw new SquireError("MISSION_NOT_FOUND", `mission not found: ${missionAbs}`);
+  
+  const missionDir = dirname(missionAbs);
+  const { path: chainsPath } = loadChains(missionDir, flags.value.get("chains"));
+  
+  const result = validateMissionFile(missionAbs, chainsPath);
+  
+  // Print one line per issue prefixed "error:" or "warn:" (include the nodeId when present)
+  for (const issue of result.issues) {
+    const prefix = `${issue.level}:`;
+    const nodeIdPart = issue.nodeId ? ` [node:${issue.nodeId}]` : "";
+    process.stdout.write(`${prefix}${nodeIdPart} ${issue.message}\n`);
+  }
+  
+  // Print final summary line
+  const errorCount = result.issues.filter(i => i.level === "error").length;
+  const warnCount = result.issues.filter(i => i.level === "warn").length;
+  process.stdout.write(`validation complete: ${errorCount} error(s), ${warnCount} warning(s)\n`);
+  
+  // Return exit code 0 when the report is ok (warnings alone are fine), 1 otherwise
+  return errorCount > 0 ? 1 : 0;
 }
 
 main(process.argv.slice(2))
