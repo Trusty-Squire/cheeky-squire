@@ -6,6 +6,7 @@ const chain = {
   fallback: "deepseek/deepseek-chat",
   knight: "anthropic/claude-opus-4",
   harness: "on" as const,
+  budget_scale: 1,
 };
 
 describe("ladder", () => {

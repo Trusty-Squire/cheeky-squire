@@ -82,7 +82,7 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
   // gates mid-run, no checkpoints, no blast radius, no escalation), then scores.
   const harnessMode = opts.harnessMode ?? chain.harness;
   if (harnessMode === "off") {
-    return runRaw(opts, chainName, chain.executor);
+    return runRaw(opts, chainName, chain.executor, chain.budget_scale);
   }
 
   const rungs = ladder(chain);
@@ -92,10 +92,11 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
   addGitExclude(workdir, [".squire/", ".squire"]);
 
   const trace = new Trace(tracePath, missionId, { now: opts.now });
-  const budget = new BudgetMeter(chains.prices, mission.budget_usd);
+  const scale = chain.budget_scale;
+  const budget = new BudgetMeter(chains.prices, mission.budget_usd * scale);
 
   trace.append("mission_start", {
-    payload: { goal: mission.goal, chain: chainName, budgetUsd: mission.budget_usd, workdir },
+    payload: { goal: mission.goal, chain: chainName, budgetUsd: mission.budget_usd * scale, budgetScale: scale, workdir },
     costUsdSoFar: 0,
   });
 
@@ -117,7 +118,7 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
       break;
     }
 
-    budget.beginNode(node.budget_usd);
+    budget.beginNode(node.budget_usd * scale);
     const outcome: NodeOutcome = {
       nodeId: node.id,
       passed: false,
@@ -286,7 +287,7 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
           // The gate passed but the attempt ran over its per-node budget: we
           // keep the verified work and flag it (a warning, not a failure).
           payload: nodeBudgetHit
-            ? { over_budget_committed: true, nodeUsd: budget.nodeSpent(), capUsd: node.budget_usd }
+            ? { over_budget_committed: true, nodeUsd: budget.nodeSpent(), capUsd: node.budget_usd * scale }
             : null,
           costUsdSoFar: budget.globalSpent(),
         });
@@ -391,6 +392,7 @@ async function runRaw(
   opts: RunMissionOptions,
   chainName: string,
   executorSlug: string,
+  scale: number,
 ): Promise<MissionResult> {
   const { mission, chains, engine, workdir, missionId, tracePath } = opts;
   const log = opts.log ?? (() => {});
@@ -398,8 +400,8 @@ async function runRaw(
 
   addGitExclude(workdir, [".squire/", ".squire"]);
   const trace = new Trace(tracePath, missionId, { now: opts.now });
-  const budget = new BudgetMeter(chains.prices, mission.budget_usd);
-  budget.beginNode(mission.budget_usd);
+  const budget = new BudgetMeter(chains.prices, mission.budget_usd * scale);
+  budget.beginNode(mission.budget_usd * scale);
 
   trace.append("mission_start", {
     payload: { goal: mission.goal, chain: chainName, budgetUsd: mission.budget_usd, workdir, mode: "raw" },

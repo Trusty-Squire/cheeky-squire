@@ -87,6 +87,9 @@ export const ChainSchema = z
     knight: z.string().min(1),
     /** "off" runs the ablation: one raw attempt, goal-only, no harness scaffolding. */
     harness: z.enum(["on", "off"]).default("on"),
+    /** Multiply all mission budgets (global + per-node) by this factor. Used to
+     *  match an expensive chain to budgets sized for a cheaper model. */
+    budget_scale: z.number().positive().default(1),
   })
   .strict();
 

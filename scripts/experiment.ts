@@ -40,7 +40,10 @@ function rungHistStr(h: Record<string, number>): string {
 
 async function main(argv: string[]): Promise<number> {
   const flags = parseFlags(argv);
-  const chains = parseChains(readFileSync(CHAINS_PATH, "utf8"), CHAINS_PATH);
+  const chainsPath = flags.value.get("chains-file")
+    ? resolve(flags.value.get("chains-file")!)
+    : CHAINS_PATH;
+  const chains = parseChains(readFileSync(chainsPath, "utf8"), chainsPath);
   const allTasks = discoverTasks(TASKS_ROOT);
   const taskNums = parseTaskNums(flags.value.get("tasks"));
   const tasks = selectTasks(allTasks, taskNums);
@@ -271,7 +274,7 @@ function parseTaskNums(spec: string | undefined): number[] {
 function parseFlags(args: string[]): { bool: Set<string>; value: Map<string, string> } {
   const bool = new Set<string>();
   const value = new Map<string, string>();
-  const valued = ["tasks", "chains"];
+  const valued = ["tasks", "chains", "chains-file"];
   for (let i = 0; i < args.length; i++) {
     const a = args[i]!;
     if (a.startsWith("--")) {

@@ -1,0 +1,21 @@
+# Frontier baseline with budgets scaled for opus pricing.
+#
+# Why: the per-task budgets in tasks/*/mission.yaml were sized for a cheap model.
+# Opus is ~50-75x pricier per token, so it tripped those caps. Derived from the
+# archived knight-only traces (results/<runId>/<task>-knight-only.jsonl): opus's
+# real spend reached ~2.1x a node's cheap-sized budget on the heaviest nodes
+# (e.g. task 20 event-make $0.52 / $0.25, task 13 migrate-callers $1.47 / $0.80).
+# The one larger outlier (task 15 implement $2.79) was a context-bloat artifact,
+# since fixed (clampOutput + boundHistory), so it is excluded. With 40% headroom
+# over the worst real ratio (2.1 x 1.4 = 2.9) we use budget_scale: 3 — and the
+# context fix lowers opus's per-node spend further, so 3 is conservative.
+#
+# Use: pnpm experiment --tasks 1..20 --chains knight-only --chains-file chains/knight-only-scaled.yaml
+chains:
+  knight-only:
+    executor: "anthropic/claude-opus-4"
+    fallback: "anthropic/claude-opus-4"
+    knight: "anthropic/claude-opus-4"
+    budget_scale: 3
+prices:
+  "anthropic/claude-opus-4": { in: 15.0, out: 75.0 }

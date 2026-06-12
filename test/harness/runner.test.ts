@@ -198,6 +198,43 @@ describe("runMission", () => {
     expect(result.nodes[0]!.maxRung).toBe(1);
   });
 
+  it("budget_scale multiplies the effective caps (frontier baseline sizing)", async () => {
+    // Same tiny-budget node + ~$0.001 spend, but a chain with budget_scale:100
+    // lifts the per-node cap to $0.01 — so it is NOT over budget and commits clean.
+    const scaledChains = parseChains(`
+chains:
+  cheap:
+    executor: "qwen/qwen3-coder"
+    fallback: "qwen/qwen3-coder"
+    knight: "qwen/qwen3-coder"
+    budget_scale: 100
+prices:
+  "qwen/qwen3-coder": { in: 0.2, out: 0.8 }
+`);
+    const mission = parseMission(oneNode.replace("budget_usd: 1", "budget_usd: 0.0001"));
+    const result = await runMission({
+      mission,
+      chains: scaledChains,
+      engine: new MockEngine({
+        resolveScript: () => ({
+          steps: [
+            { usage: { in: 1000, out: 1000 } }, // ~$0.001, under the scaled $0.01 cap
+            { tool: "edit", args: { path: "src/target.ts", oldString: "v = 0", newString: "v = 1" } },
+            { tool: "bash", args: { command: "bash check.sh" } },
+            { done: "fixed" },
+          ],
+        }),
+      }),
+      workdir: repo,
+      missionId: "scaled",
+      tracePath: join(repo, ".squire", "trace.jsonl"),
+      now: () => ++clock,
+    });
+    expect(result.completed).toBe(true);
+    const pass = readTrace(result.tracePath).find((e) => e.kind === "node_pass");
+    expect((pass!.payload as { over_budget_committed?: boolean })?.over_budget_committed).toBeUndefined();
+  });
+
   it("stops escalating a FAILING node once it has burned its per-node budget", async () => {
     // Tiny node budget, gate never passes — should fail FAST without climbing all
     // four rungs (the per-node cap guards starting another attempt).
