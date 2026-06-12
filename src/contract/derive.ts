@@ -234,11 +234,11 @@ function formatZodIssues(issues: z.ZodIssue[]): string {
 // CLI wiring
 // ---------------------------------------------------------------------------
 
-/** `squire derive "<goal>" [--chain <name>] [--budget <usd>] [--out <file>] [--yes] [--workdir <dir>]`. */
+/** `ser derive "<goal>" [--chain <name>] [--budget <usd>] [--out <file>] [--yes] [--workdir <dir>]`. */
 export async function runDerive(args: string[]): Promise<number> {
   const { positional, value, bool } = parseDeriveArgs(args);
   const goal = positional[0];
-  if (!goal) throw new SquireError("USAGE", 'squire derive "<goal>" [--chain <name>] [--yes]');
+  if (!goal) throw new SquireError("USAGE", 'ser derive "<goal>" [--chain <name>] [--yes]');
 
   const workdir = resolve(value.get("workdir") ?? process.cwd());
   const chainName = value.get("chain") ?? "cheap";

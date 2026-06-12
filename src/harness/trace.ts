@@ -190,7 +190,7 @@ export function summarize(events: TraceEvent[]): {
   return { nodes: order.map((id) => byNode.get(id)!), totalCostUsd, completed, missionId };
 }
 
-/** Plain-text per-node table + totals for `squire trace`. Keep it boring (SPEC §10). */
+/** Plain-text per-node table + totals for `ser trace`. Keep it boring (SPEC §10). */
 export function summarizeTrace(path: string): string {
   const events = readTrace(path);
   const { nodes, totalCostUsd, completed, missionId } = summarize(events);

@@ -1,4 +1,9 @@
-# CLAUDE.md — Cheeky Squire v0.1
+# CLAUDE.md — Castellan (formerly Cheeky Squire) v0.1.x
+
+> Rebranded 2026-06-12: product=Castellan, binary=`ser` (+`castellan` alias),
+> npm package=`castellan`. SPEC.md retains the original v0.1 name and binary
+> as the historical design authority; internal identifiers (.squire/,
+> SquireError) unchanged for now.
 
 ## What this is
 A verification harness that lets cheap LLMs complete long

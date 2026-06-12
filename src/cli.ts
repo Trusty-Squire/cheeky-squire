@@ -39,14 +39,14 @@ async function main(argv: string[]): Promise<number> {
 function printUsage(): void {
   process.stdout.write(
     [
-      "squire — a verification harness for cheap LLMs on long coding tasks",
+      "ser — Castellan: verified coding agent. Specs compile to gated loops.",
       "",
       "Usage:",
-      "  squire run <mission.yaml> [--mock] [--chain <name>] [--sandbox]",
-      "  squire derive \"<goal>\" [--chain <name>] [--yes] [--out <file>]",
-      "  squire trace <trace.jsonl>",
-      "  squire validate <mission.yaml> [--chains <file>]",
-      "  squire experiment [-- <experiment args>]",
+      "  ser run <mission.yaml> [--mock] [--chain <name>] [--sandbox]",
+      "  ser derive \"<goal>\" [--chain <name>] [--yes] [--out <file>]",
+      "  ser trace <trace.jsonl>",
+      "  ser validate <mission.yaml> [--chains <file>]",
+      "  ser experiment [-- <experiment args>]",
       "",
     ].join("\n"),
   );
@@ -94,7 +94,7 @@ function loadChains(missionDir: string, explicit?: string): { chains: ChainsFile
 async function cmdRun(args: string[]): Promise<number> {
   const flags = parseFlags(args, ["chain", "chains", "harness"]);
   const missionPath = flags.positional[0];
-  if (!missionPath) throw new SquireError("USAGE", "squire run <mission.yaml> [--mock]");
+  if (!missionPath) throw new SquireError("USAGE", "ser run <mission.yaml> [--mock]");
   const missionAbs = resolve(missionPath);
   if (!existsSync(missionAbs)) throw new SquireError("MISSION_NOT_FOUND", `mission not found: ${missionAbs}`);
   const missionDir = dirname(missionAbs);
@@ -185,7 +185,7 @@ async function cmdRun(args: string[]): Promise<number> {
 async function cmdTrace(args: string[]): Promise<number> {
   const flags = parseFlags(args, []);
   const path = flags.positional[0];
-  if (!path) throw new SquireError("USAGE", "squire trace <trace.jsonl>");
+  if (!path) throw new SquireError("USAGE", "ser trace <trace.jsonl>");
   process.stdout.write(summarizeTrace(resolve(path)) + "\n");
   return 0;
 }
@@ -206,7 +206,7 @@ async function cmdExperiment(args: string[]): Promise<number> {
 async function cmdValidate(args: string[]): Promise<number> {
   const flags = parseFlags(args, ["chains"]);
   const missionPath = flags.positional[0];
-  if (!missionPath) throw new SquireError("USAGE", "squire validate <mission.yaml> [--chains <file>]");
+  if (!missionPath) throw new SquireError("USAGE", "ser validate <mission.yaml> [--chains <file>]");
   
   const missionAbs = resolve(missionPath);
   if (!existsSync(missionAbs)) throw new SquireError("MISSION_NOT_FOUND", `mission not found: ${missionAbs}`);

@@ -1,9 +1,18 @@
-# Cheeky Squire v0.1
+# Castellan
+
+> **You bring the inspiration. Your castellan handles the rest — and proves it.**
+
+1. **Verified execution, receipts attached** — frontier results at ~1/20th frontier cost
+2. **Loop-native** — specs compile to gated loops; git is the memory, tests are the judge
+3. **Open engine, any model, no lock-in** — escalation across vendors, not within one
+
+*(Formerly "Cheeky Squire" — the v0.1 experiment name survives in SPEC.md and
+internal identifiers. Binary: `ser`.)*
 
 **Thesis under test:** cheap models (Qwen / DeepSeek class) fail long, multi-step
 coding tasks not because they can't write the code, but because of four
 scaffold-fixable failure modes — context rot, silent failure, error compounding,
-and format fragility. Cheeky Squire is a verification harness that gives each
+and format fragility. Castellan is a verification harness that gives each
 task-node a *fresh minimal context*, verifies every node with an *objective gate*
 (a shell command judged by exit code — never prose), *checkpoints* progress as git
 commits, and *escalates* to a frontier model only after repeated failure. If the
@@ -52,13 +61,13 @@ Requires Node 20+ and pnpm.
 
 ```bash
 pnpm install
-pnpm build        # compiles src → dist (needed for the `squire` binary)
+pnpm build        # compiles src → dist (needed for the `ser` binary)
 pnpm test         # 74 tests, hermetic, no network
 ```
 
 ## The two commands that matter
 
-### `squire run` — execute one mission
+### `ser run` — execute one mission
 
 ```bash
 node dist/cli.js run examples/demo.yaml --mock
@@ -69,11 +78,11 @@ git ops in a temp sandbox) — this is the 3-node demo that exercises
 pack → run → reconcile → gate → checkpoint for real. Drop `--mock` for a real run
 (needs `OPENROUTER_API_KEY`); add `--chain <name>` to override the mission's chain.
 If the workdir isn't a git repo it's copied into a throwaway temp repo, so your
-source tree is never mutated. `squire trace <file>` pretty-prints any trace.
+source tree is never mutated. `ser trace <file>` pretty-prints any trace.
 
-### `squire validate` — pre-flight mission validation
+### `ser validate` — pre-flight mission validation
 
-`squire validate <mission.yaml>` checks a mission file for errors without spending any tokens or touching external services. It validates the mission schema, verifies referenced chains exist, warns when context_globs match no files, and flags empty blast_radius as an error. This command exits with code 0 when the mission is valid, making it suitable for CI pipelines or pre-run checks. Using squire validate helps catch configuration issues early in the development process before attempting a full mission run.
+`ser validate <mission.yaml>` checks a mission file for errors without spending any tokens or touching external services. It validates the mission schema, verifies referenced chains exist, warns when context_globs match no files, and flags empty blast_radius as an error. This command exits with code 0 when the mission is valid, making it suitable for CI pipelines or pre-run checks. Using ser validate helps catch configuration issues early in the development process before attempting a full mission run.
 
 ### `pnpm experiment` — the benchmark (the whole point)
 
@@ -99,8 +108,8 @@ cost / completed       $___            $___           $___
 ```
 (placeholder — fill from your live run; the harness lift is `cheap` minus `cheap-raw`.)
 
-`squire run examples/demo.yaml --harness off` runs the same ablation on one
-mission. `squire derive "<goal>"` is a convenience planner; the benchmark uses
+`ser run examples/demo.yaml --harness off` runs the same ablation on one
+mission. `ser derive "<goal>"` is a convenience planner; the benchmark uses
 hand-written missions. `pnpm calibrate --tasks 11..20 --chain cheap` (live,
 human-run) reports per-task node completion and flags any task ≥90% complete as
 needing hardening.

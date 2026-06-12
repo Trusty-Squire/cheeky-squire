@@ -1,12 +1,13 @@
 {
-  "name": "@cheekysquire/cli",
+  "name": "castellan",
   "version": "0.1.0",
-  "description": "Cheeky Squire — a verification harness that lets cheap LLMs complete long multi-step coding tasks reliably.",
+  "description": "Castellan — verified coding agent. Specs compile to gated loops: git is the memory, tests are the judge. Frontier results at 1/20th frontier cost.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@8.15.0",
   "bin": {
-    "squire": "./dist/cli.js"
+    "ser": "./dist/cli.js",
+    "castellan": "./dist/cli.js"
   },
   "engines": {
     "node": ">=20"
