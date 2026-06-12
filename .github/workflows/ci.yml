@@ -1,0 +1,47 @@
+name: CI
+
+# Runs ONLY the hermetic gates — zero network, no OPENROUTER_API_KEY, no spend.
+# The money-spending commands (`pnpm experiment` real run, `pnpm calibrate`) are
+# deliberately NOT run here; they are human-triggered.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (gate 2)
+        run: pnpm typecheck
+
+      - name: Lint (gate 3)
+        run: pnpm lint
+
+      - name: Test (gate 1 — hermetic, no network, no API key)
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Demo end-to-end, mock (gate 4)
+        run: node dist/cli.js run examples/demo.yaml --mock
+
+      - name: Demo ablation, mock + harness off (gate 4b)
+        run: node dist/cli.js run examples/demo.yaml --mock --harness off
+
+      - name: Experiment dry-run — validates 20 fixtures + 3-chain schema (gate 5)
+        run: pnpm experiment --dry-run

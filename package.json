@@ -2,7 +2,9 @@
   "name": "@cheekysquire/cli",
   "version": "0.1.0",
   "description": "Cheeky Squire — a verification harness that lets cheap LLMs complete long multi-step coding tasks reliably.",
+  "license": "MIT",
   "type": "module",
+  "packageManager": "pnpm@8.15.0",
   "bin": {
     "squire": "./dist/cli.js"
   },
