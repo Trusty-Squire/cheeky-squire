@@ -1,0 +1,14 @@
+thesis: "Token-bucket rate limiting middleware for an existing HTTP API."
+requirements:
+  - id: R1
+    statement: "requests beyond N/minute get 429 with a Retry-After header"
+    acceptance: { tier: 1, gate: "npm run test" }
+decisions:
+  - id: D1
+    statement: "in-memory token bucket per API key"
+    rationale: "single-instance service"
+    claims: [C1]
+claims:
+  - id: C1
+    statement: "an in-memory token bucket suffices for a single-instance API"
+    status: unverified

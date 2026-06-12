@@ -1,0 +1,14 @@
+thesis: "Strongly-consistent global database with <1ms cross-continent writes."
+requirements:
+  - id: R1
+    statement: "writes ack globally consistent in under 1ms between Sydney and London"
+    acceptance: { tier: 1, gate: "npm run test" }
+decisions:
+  - id: D1
+    statement: "synchronous consensus across continents per write"
+    rationale: "strong consistency simplifies app code"
+    claims: [C1]
+claims:
+  - id: C1
+    statement: "round-trip coordination between Sydney and London can complete in under 1 millisecond"
+    status: unverified

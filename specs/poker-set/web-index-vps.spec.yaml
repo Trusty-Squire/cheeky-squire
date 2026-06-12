@@ -1,0 +1,14 @@
+thesis: "Re-index the entire public web nightly on a $5/month VPS."
+requirements:
+  - id: R1
+    statement: "full web crawl + index completes nightly"
+    acceptance: { tier: 1, gate: "npm run test" }
+decisions:
+  - id: D1
+    statement: "single-node crawler with aggressive parallelism"
+    rationale: "keeps cost at $5/mo"
+    claims: [C1]
+claims:
+  - id: C1
+    statement: "a $5 VPS can fetch and index the public web (billions of pages) in under 24 hours"
+    status: unverified

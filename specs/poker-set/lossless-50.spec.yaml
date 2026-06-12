@@ -1,0 +1,14 @@
+thesis: "A compressor that losslessly shrinks ANY file by at least 50%."
+requirements:
+  - id: R1
+    statement: "all inputs compress >=50% and decompress byte-identical"
+    acceptance: { tier: 1, gate: "npm run test" }
+decisions:
+  - id: D1
+    statement: "novel entropy coding achieves universal 50% reduction"
+    rationale: "modern math beats Shannon"
+    claims: [C1]
+claims:
+  - id: C1
+    statement: "a lossless algorithm can compress every possible input by 50%"
+    status: unverified

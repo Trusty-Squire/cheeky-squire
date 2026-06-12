@@ -1,0 +1,14 @@
+thesis: "A todo-list CLI storing tasks in a local JSON file."
+requirements:
+  - id: R1
+    statement: "add/list/done commands persist to todos.json"
+    acceptance: { tier: 1, gate: "npm run test" }
+decisions:
+  - id: D1
+    statement: "plain JSON file storage, no database"
+    rationale: "single-user local tool"
+    claims: [C1]
+claims:
+  - id: C1
+    statement: "a JSON file is sufficient storage for a single-user todo list"
+    status: unverified

@@ -1,0 +1,14 @@
+thesis: "A GTO-level no-limit hold'em poker bot, solved on consumer hardware."
+requirements:
+  - id: R1
+    statement: "bot plays GTO-optimal NLHE from a solved strategy"
+    acceptance: { tier: 1, gate: "npm run test" }
+decisions:
+  - id: D1
+    statement: "solve full-game NLHE with CFR locally"
+    rationale: "CFR is the standard solver algorithm"
+    claims: [C1]
+claims:
+  - id: C1
+    statement: "full-game no-limit hold'em CFR is solvable on a consumer laptop in days"
+    status: unverified
