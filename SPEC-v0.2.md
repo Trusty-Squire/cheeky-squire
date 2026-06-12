@@ -15,10 +15,25 @@
 
 ## 1. Product thesis (v0.2 increment)
 
-Castellan: **you bring the inspiration; your castellan handles the rest — and
-proves it.** Pillars: (1) verified execution, receipts attached, at ~1/20th
-frontier cost; (2) loop-native — specs compile to gated loops, git is the
-memory, tests are the judge; (3) open engine, any model, no lock-in.
+**Cheap and reliable makes loops.** Loops are the product; cheap × reliable
+is the multiplication that makes them possible. Expensive×reliable rations
+turns (you babysit); cheap×unreliable compounds garbage (you babysit harder);
+cheap×reliable means iteration is nearly free and every pass verifiably
+advances or honestly halts — the user can let go of the crank. Verification
+and cost are the two FACTORS, not the product. Incumbents sell turns; a turn
+needs a human present. Castellan sells loops; a loop doesn't.
+
+Slogan: *you bring the inspiration; your castellan handles the rest — and
+proves it.* Pillars (in thesis order): (1) loop-native — specs compile to
+gated loops, git is the memory, tests are the judge; (2) reliable — verified
+execution, receipts attached; (3) cheap/open/no lock-in — ~1/20th frontier
+cost, any model, cross-vendor escalation only on verified failure.
+
+**North-star metric (added with the thesis):** loop endurance — unattended
+iterations per human intervention — alongside cost per verified iteration.
+Both are computable from existing traces (interventions = halts +
+human-gate verdicts + plan edits); every experiment and dogfood SHOULD report
+them from now on. This is a measurement orientation, not a new success gate.
 
 The v0.1 bottleneck, proven by dogfood: **mission authoring is a skill** —
 weak gates pass poisoned artifacts, and hand-written YAML cannot be the
@@ -53,7 +68,7 @@ state container.
 | 2 build | plan + repo | `ser derive` (§6) compiles spec → mission; `ser run` executes (v0.1); `ser do` (§7) for single gated goals |
 | 3 bug fix | repro + fix | repro-then-fix mission pack (§7) — the repro is the gate |
 | 4 feature | mini-spec | condensed 1→2, same pipe |
-| 5 closed loop | telemetry → goals | OUT OF SCOPE v0.2 (triggers/queue/ingestion are v0.3 candidates) |
+| 5 closed loop | telemetry → goals | OUT OF SCOPE v0.2 — but under the thesis (loops are the product), the standing-loop runtime (triggers, queue, recurring missions, signal→goal ingestion) is the COMMITTED v0.3 centerpiece, not a candidate. v0.2 builds the loop's front door (derive); v0.3 lets loops stand. |
 
 ---
 
@@ -282,7 +297,8 @@ now with the failing requirement named). NEVER emit an ungated node.
 ## 8. Out of scope for v0.2 (building these = drift)
 
 TUI/ink renderer · PR-native GitHub App/Action · MCP server · hosted
-tier/control plane · triggers/queue/telemetry ingestion (phase 5) ·
+tier/control plane · triggers/queue/telemetry ingestion (phase 5 — fenced
+from v0.2 but COMMITTED as the v0.3 centerpiece per §1's thesis) ·
 leaderboard/referee harness (v0.3 candidate; its engine prerequisite —
 external-CLI engines — may land if trivial) · hard tier-3 judge gates ·
 vote-of-3 research panels · per-model prompt tuning (BANNED — pillar 3 is

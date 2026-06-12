@@ -1,23 +1,40 @@
 # Castellan
 
-> **You bring the inspiration. Your castellan handles the rest — and proves it.**
+## Cheap and reliable makes loops.
 
-1. **Verified execution, receipts attached** — frontier results at ~1/20th frontier cost
-2. **Loop-native** — specs compile to gated loops; git is the memory, tests are the judge
-3. **Open engine, any model, no lock-in** — escalation across vendors, not within one
+That's the whole thesis. Cheap × reliable is the multiplication that makes
+loops possible:
+
+| | what happens to a loop |
+|---|---|
+| **expensive × reliable** (frontier models) | each iteration costs real money — you ration turns, so you babysit |
+| **cheap × unreliable** (raw cheap models, leaky harnesses) | each iteration compounds garbage — loops diverge, so you babysit harder |
+| **cheap × reliable** (gated) | iteration is nearly free and every pass verifiably advances or honestly halts — **you can let go of the crank** |
+
+**Loops are the product.** Verification makes cheap models reliable; cheap
+models make iteration affordable; together they make loops you can walk away
+from — overnight runs, retry ladders, adversarial review swarms, benchmark
+sweeps. Incumbent coding agents sell *turns*, and a turn needs you sitting
+there. Castellan sells *loops*, and a loop doesn't.
+
+> You bring the inspiration. Your castellan handles the rest — and proves it.
+
+1. **Loop-native** — specs compile to gated loops; git is the memory, tests are the judge
+2. **Reliable** — verified execution, receipts attached; the model never grades its own homework
+3. **Cheap, open, no lock-in** — frontier results at ~1/20th cost, any model, escalation across vendors only on verified failure
 
 *(Formerly "Cheeky Squire" — the v0.1 experiment name survives in SPEC.md and
 internal identifiers. Binary: `ser`.)*
 
-**Thesis under test:** cheap models (Qwen / DeepSeek class) fail long, multi-step
-coding tasks not because they can't write the code, but because of four
-scaffold-fixable failure modes — context rot, silent failure, error compounding,
-and format fragility. Castellan is a verification harness that gives each
-task-node a *fresh minimal context*, verifies every node with an *objective gate*
-(a shell command judged by exit code — never prose), *checkpoints* progress as git
-commits, and *escalates* to a frontier model only after repeated failure. If the
-thesis holds, a cheap verified chain reaches frontier-comparable completion at a
-fraction of the cost.
+**The mechanism (and the measured claim):** cheap models (Qwen / DeepSeek class)
+fail long, multi-step coding tasks not because they can't write the code, but
+because of four scaffold-fixable failure modes — context rot, silent failure,
+error compounding, and format fragility. Castellan gives each task-node a
+*fresh minimal context*, verifies every node with an *objective gate* (a shell
+command judged by exit code — never prose), *checkpoints* progress as git
+commits, and *escalates* to a frontier model only after verified failure.
+Measured: the same cheap model goes **35% → 100%** completion with the harness
+(ablation), and matches Opus **20/20** at ~1/25th the cost — see RESULTS.md.
 
 v0.1 is an **experiment**, not a product. The deliverable is the benchmark table
 from `pnpm experiment`: for each task × chain it reports completion, escalations

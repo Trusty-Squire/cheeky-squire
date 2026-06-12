@@ -6,6 +6,17 @@
 > as the historical design authority; internal identifiers (.squire/,
 > SquireError) unchanged for now.
 
+## Thesis (north star — positioning and product decisions defer to this)
+**Cheap and reliable makes loops.** Loops are the product. Cheap × reliable
+is the multiplication that makes them possible: expensive×reliable rations
+turns (you babysit); cheap×unreliable compounds garbage (you babysit
+harder); cheap×reliable means iteration is nearly free and every pass
+verifiably advances or honestly halts — you can let go of the crank.
+Verification and cost are the two FACTORS, not the product. Incumbents sell
+turns; a turn needs you. Castellan sells loops; a loop doesn't. North-star
+metric: loop endurance — unattended iterations per human intervention —
+alongside cost per verified iteration.
+
 ## What this is
 A verification harness that lets cheap LLMs complete long
 multi-step coding tasks reliably. v0.1 is an EXPERIMENT.
