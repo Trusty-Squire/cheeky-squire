@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseMission,
+  effectiveGate,
   parseChains,
   resolveChain,
   topoSort,
@@ -105,5 +106,99 @@ describe("topoSort", () => {
     const m = parseMission(validMission);
     const order = topoSort(m.nodes).map((n: MissionNode) => n.id);
     expect(order.indexOf("a")).toBeLessThan(order.indexOf("b"));
+  });
+});
+
+describe("gate schema v2 (SPEC-v0.2 §4)", () => {
+  const base = `
+goal: "gate forms"
+budget_usd: 1
+chain: cheap
+nodes:
+  - id: a
+    brief: "a"
+    blast_radius: ["src/**"]
+    budget_usd: 0.5
+`;
+
+  it("accepts the v0.1 done_check form unchanged (back-compat)", () => {
+    const m = parseMission(base.replace('budget_usd: 0.5', 'budget_usd: 0.5\n    done_check: "pnpm test"'));
+    const g = effectiveGate(m.nodes[0]!);
+    expect(g).toEqual({ type: "command", run: "pnpm test", soft: false });
+  });
+
+  it("accepts a v2 command gate and resolves it identically", () => {
+    const m = parseMission(
+      base.replace(
+        "budget_usd: 0.5",
+        'budget_usd: 0.5\n    gate: { type: command, run: "pnpm test" }',
+      ),
+    );
+    expect(effectiveGate(m.nodes[0]!).run).toBe("pnpm test");
+  });
+
+  it("rejects a node with BOTH done_check and gate, and with NEITHER", () => {
+    expect(() =>
+      parseMission(
+        base.replace(
+          "budget_usd: 0.5",
+          'budget_usd: 0.5\n    done_check: "x"\n    gate: { type: command, run: "y" }',
+        ),
+      ),
+    ).toThrow(/exactly one/);
+    expect(() => parseMission(base)).toThrow(/exactly one/);
+  });
+
+  it("human gates require an artifact", () => {
+    expect(() =>
+      parseMission(base.replace("budget_usd: 0.5", "budget_usd: 0.5\n    gate: { type: human }")),
+    ).toThrow(/artifact/);
+    const m = parseMission(
+      base.replace(
+        "budget_usd: 0.5",
+        'budget_usd: 0.5\n    gate: { type: human, artifact: "renders/grid.png" }',
+      ),
+    );
+    expect(effectiveGate(m.nodes[0]!).type).toBe("human");
+  });
+
+  it("judge gates must be soft and carry a pinned judge config (v0.2)", () => {
+    expect(() =>
+      parseMission(
+        base.replace(
+          "budget_usd: 0.5",
+          'budget_usd: 0.5\n    gate: { type: judge, soft: false, judge: { model: "m", rubric: "r" } }',
+        ),
+      ),
+    ).toThrow(/soft/);
+    const m = parseMission(
+      base.replace(
+        "budget_usd: 0.5",
+        'budget_usd: 0.5\n    gate: { type: judge, soft: true, judge: { model: "m", rubric: "r" } }',
+      ),
+    );
+    expect(m.nodes[0]!.gate!.judge!.votes).toBe(3); // default
+  });
+
+  it("enforces max_human_checks across the mission", () => {
+    const two = `
+goal: "too many humans"
+budget_usd: 1
+chain: cheap
+max_human_checks: 1
+nodes:
+  - id: a
+    brief: "a"
+    blast_radius: ["src/**"]
+    gate: { type: human, artifact: "a.png" }
+    budget_usd: 0.5
+  - id: b
+    brief: "b"
+    blast_radius: ["src/**"]
+    gate: { type: human, artifact: "b.png" }
+    budget_usd: 0.5
+`;
+    expect(() => parseMission(two)).toThrow(/max_human_checks/);
+    expect(parseMission(two.replace("max_human_checks: 1", "max_human_checks: 2")).nodes).toHaveLength(2);
   });
 });

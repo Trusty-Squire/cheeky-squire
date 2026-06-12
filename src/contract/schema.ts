@@ -10,6 +10,50 @@ import { SquireError } from "../errors.js";
 
 const globList = z.array(z.string().min(1));
 
+/**
+ * Gate ladder (SPEC-v0.2 §4). Tiers: command (exit code, the v0.1 default),
+ * metric (a frozen perceptual/statistical metric behind a shell command),
+ * judge (pinned external model + rubric — SOFT ONLY in v0.2: flags, never
+ * fails), human (a recorded verdict on an adjudication artifact).
+ */
+export const GateSchema = z
+  .object({
+    type: z.enum(["command", "metric", "judge", "human"]),
+    /** command|metric: the shell command, exit 0 = pass. */
+    run: z.string().min(1).optional(),
+    /** human|judge: the artifact (path/glob) the verdict adjudicates. */
+    artifact: z.string().min(1).optional(),
+    /** Soft gates flag instead of failing. v0.2: judge gates MUST be soft. */
+    soft: z.boolean().default(false),
+    /** Pinned judge config (tier 3). Hard judge gates are v0.3+. */
+    judge: z
+      .object({
+        model: z.string().min(1),
+        rubric: z.string().min(1),
+        votes: z.number().int().positive().default(3),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((gate, ctx) => {
+    const need = (cond: boolean, message: string) => {
+      if (!cond) ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+    };
+    if (gate.type === "command" || gate.type === "metric") {
+      need(Boolean(gate.run), `${gate.type} gate requires "run"`);
+    }
+    if (gate.type === "human") {
+      need(Boolean(gate.artifact), 'human gate requires "artifact" (what the verdict adjudicates)');
+    }
+    if (gate.type === "judge") {
+      need(Boolean(gate.judge), 'judge gate requires "judge" config (pinned model + rubric)');
+      need(gate.soft === true, "judge gates must be soft:true in v0.2 (hard judge gates need a calibration set)");
+    }
+  });
+
+export type Gate = z.infer<typeof GateSchema>;
+
 export const NodeSchema = z
   .object({
     id: z
@@ -20,13 +64,30 @@ export const NodeSchema = z
     deps: z.array(z.string().min(1)).default([]),
     context_globs: globList.default([]),
     blast_radius: globList,
-    done_check: z.string().min(1),
+    /** v0.1 form — equivalent to gate: { type: "command", run: <done_check> }. */
+    done_check: z.string().min(1).optional(),
+    /** v0.2 form — exactly one of done_check | gate per node. */
+    gate: GateSchema.optional(),
     budget_usd: z.number().positive(),
     max_context_tokens: z.number().int().positive().default(40_000),
   })
-  .strict();
+  .strict()
+  .superRefine((node, ctx) => {
+    if (Boolean(node.done_check) === Boolean(node.gate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `node "${node.id}" must have exactly one of done_check | gate`,
+      });
+    }
+  });
 
 export type MissionNode = z.infer<typeof NodeSchema>;
+
+/** Resolve a node's gate regardless of which form (v0.1 done_check / v0.2 gate) it used. */
+export function effectiveGate(node: MissionNode): Gate {
+  if (node.gate) return node.gate;
+  return { type: "command", run: node.done_check!, soft: false };
+}
 
 export const MissionSchema = z
   .object({
@@ -34,10 +95,20 @@ export const MissionSchema = z
     budget_usd: z.number().positive(),
     chain: z.string().min(1),
     workdir: z.string().default("."),
+    /** Budget for tier-4 human checkpoints across the mission (SPEC-v0.2 §4). */
+    max_human_checks: z.number().int().nonnegative().default(3),
     nodes: z.array(NodeSchema).min(1),
   })
   .strict()
   .superRefine((mission, ctx) => {
+    const humanGates = mission.nodes.filter((n) => n.gate?.type === "human").length;
+    if (humanGates > mission.max_human_checks) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${humanGates} human gate(s) exceed max_human_checks (${mission.max_human_checks})`,
+        path: ["nodes"],
+      });
+    }
     const ids = new Set<string>();
     for (const node of mission.nodes) {
       if (ids.has(node.id)) {

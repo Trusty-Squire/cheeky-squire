@@ -1,5 +1,6 @@
 import type { ChainsFile, Mission } from "../contract/schema.js";
-import { resolveChain, topoSort } from "../contract/schema.js";
+import { resolveChain, topoSort, effectiveGate, type MissionNode } from "../contract/schema.js";
+import { SquireError } from "../errors.js";
 import type { Engine, AttemptRecord, ToolCallRecord, ToolName } from "../engine/types.js";
 import { Trace } from "./trace.js";
 import { packContext } from "./context.js";
@@ -26,6 +27,21 @@ fails, fix and re-run. Declare done only when it exits 0.
 Your final message: one short paragraph stating what changed
 (file list) and the check result. Claim nothing you did not do;
 your tool calls are audited against your claims.`;
+
+
+/**
+ * The shell command for a node's gate. command/metric gates execute as v0.1
+ * done_checks did. human/judge gates need runner adjudication support (next
+ * slice) — until then they fail LOUDLY rather than silently passing.
+ */
+function gateCommandOf(node: MissionNode): string {
+  const gate = effectiveGate(node);
+  if (gate.type === "command" || gate.type === "metric") return gate.run!;
+  throw new SquireError(
+    "GATE_TYPE_UNSUPPORTED",
+    `node "${node.id}" uses a ${gate.type} gate; runner support lands in the v0.2 runner slice`,
+  );
+}
 
 export interface NodeOutcome {
   nodeId: string;
@@ -222,7 +238,7 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
       const changed = await changedFilesSince(workdir, lastGreen);
       const rec = reconcile({
         blastRadius: node.blast_radius,
-        doneCheck: node.done_check,
+        doneCheck: gateCommandOf(node),
         changedFiles: changed,
         record,
       });
@@ -246,7 +262,7 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
         });
       }
 
-      const gate = await runGate(node.done_check, workdir, gateTimeoutMs);
+      const gate = await runGate(gateCommandOf(node), workdir, gateTimeoutMs);
       outcome.gateExitCode = gate.exitCode;
       trace.append("gate", {
         nodeId: node.id,
@@ -462,7 +478,7 @@ async function runRaw(
   const committed = new Set<string>();
   const outcomes: NodeOutcome[] = [];
   for (const node of mission.nodes) {
-    const gate = await runGate(node.done_check, workdir, gateTimeoutMs);
+    const gate = await runGate(gateCommandOf(node), workdir, gateTimeoutMs);
     trace.append("gate", {
       nodeId: node.id,
       rung: 1,
