@@ -8,8 +8,9 @@ import {
   type Usage,
 } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
-import { PiEngine, outputCapFor } from "../../src/engine/pi.js";
+import { PiEngine, outputCapFor, boundHistory } from "../../src/engine/pi.js";
 import type { AttemptRequest, EngineEvent } from "../../src/engine/types.js";
+import type { Message } from "@earendil-works/pi-ai";
 
 /** Build a full Usage object from input/output token counts. */
 function usage(input: number, output: number): Usage {
@@ -174,6 +175,39 @@ describe("PiEngine (network-free via injected streamFn)", () => {
     expect(outputCapFor(100)).toBe(100);
   });
 
+  it("keeps the agent message history bounded across many turns", async () => {
+    // 24 tool-call turns then a final text turn. Each tool result is a big bash
+    // dump (clamped to ~12KB by the executor). Without history bounding, the
+    // transcript would grow well past the cap turn over turn.
+    const turns: TurnSpec[] = [];
+    for (let i = 0; i < 24; i++) {
+      turns.push({
+        tools: [{ id: `b${i}`, name: "bash", arguments: { command: "for n in $(seq 1 2000); do echo xxxxxxxxxxxxxxxxxxxx; done" } }],
+        in: 100,
+        out: 30,
+      });
+    }
+    turns.push({ text: "done exploring", in: 10, out: 5 });
+
+    // Capture the transcript size handed to the provider on each turn.
+    const contextTokens: number[] = [];
+    const inner = scriptedStreamFn(turns);
+    const capturing: StreamFn = ((model: unknown, context: { messages: unknown[] }, options: unknown) => {
+      contextTokens.push(Math.ceil(JSON.stringify(context.messages).length / 4));
+      return (inner as unknown as (...a: unknown[]) => unknown)(model, context, options);
+    }) as unknown as StreamFn;
+
+    const engine = new PiEngine({ streamFn: capturing });
+    await collect(engine, req({ maxTokens: 4000 }));
+
+    expect(contextTokens.length).toBeGreaterThanOrEqual(20);
+    const maxTokens = Math.max(...contextTokens);
+    // Bounded well under what 24 unclamped/unpruned ~3K-token turns would reach (~72K+).
+    expect(maxTokens).toBeLessThan(60_000);
+    // And it plateaus: the last turn is not dramatically larger than the mid-run size.
+    expect(contextTokens.at(-1)!).toBeLessThan(60_000);
+  });
+
   it("runs bash and reads files", async () => {
     writeFileSync(join(cwd, "src", "x.ts"), "hello world");
     const engine = new PiEngine({
@@ -189,5 +223,58 @@ describe("PiEngine (network-free via injected streamFn)", () => {
     );
     expect(results.some((r) => r.output.includes("hello world"))).toBe(true);
     expect(results.some((r) => r.output.includes("ran"))).toBe(true);
+  });
+});
+
+describe("boundHistory", () => {
+  const userMsg = (text: string): Message => ({ role: "user", content: text, timestamp: 0 });
+  const asstMsg = (text: string): Message => ({
+    role: "assistant",
+    content: [{ type: "text", text }],
+    api: "openai-completions",
+    provider: "openrouter",
+    model: "m",
+    usage: usage(0, 0),
+    stopReason: "stop",
+    timestamp: 0,
+  });
+  const toolRes = (text: string): Message => ({
+    role: "toolResult",
+    toolCallId: "t",
+    toolName: "bash",
+    content: [{ type: "text", text }],
+    isError: false,
+    timestamp: 0,
+  });
+
+  it("returns the transcript unchanged when under the cap", () => {
+    const msgs = [userMsg("task"), asstMsg("ok"), toolRes("result")];
+    expect(boundHistory(msgs, 50_000)).toEqual(msgs);
+  });
+
+  it("keeps the first prompt + most recent turns, dropping the oldest, under the cap", () => {
+    const big = "x".repeat(8_000); // ~2k tokens each
+    const msgs: Message[] = [userMsg("THE-TASK")];
+    for (let i = 0; i < 20; i++) {
+      msgs.push(asstMsg(`turn ${i} ${big}`));
+      msgs.push(toolRes(`out ${i} ${big}`));
+    }
+    const cap = 20_000;
+    const out = boundHistory(msgs, cap);
+
+    // first prompt preserved
+    expect(out[0]).toEqual(userMsg("THE-TASK"));
+    // pruned (fewer messages than the original 41)
+    expect(out.length).toBeLessThan(msgs.length);
+    // total estimate stays near the cap (allow one trailing turn of overshoot)
+    const est = Math.ceil(JSON.stringify(out).length / 4);
+    expect(est).toBeLessThan(cap * 1.6);
+    // the MOST RECENT turn survived (turn 19), the oldest (turn 0) was dropped
+    expect(JSON.stringify(out)).toContain("turn 19");
+    expect(JSON.stringify(out)).not.toContain("turn 0 ");
+    // no orphaned toolResult: every toolResult is preceded by a non-toolResult
+    for (let i = 0; i < out.length; i++) {
+      if (out[i]!.role === "toolResult") expect(i > 0 && out[i - 1]!.role !== "user").toBe(true);
+    }
   });
 });

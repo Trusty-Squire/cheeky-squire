@@ -9,12 +9,54 @@ import {
   type ImageContent,
 } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
+import type { Message } from "@earendil-works/pi-ai";
 import { ToolExecutor } from "./tools.js";
-import { renderPackedFiles } from "../harness/context.js";
+import { renderPackedFiles, estimateTokens } from "../harness/context.js";
 import type { AttemptRequest, Engine, EngineEvent, ModelRef, ToolName } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const MAX_BLAST_VIOLATIONS = 3;
+/**
+ * Bound the agent loop's conversation history. Every turn re-sends the full
+ * transcript; without a cap a confused model that runs many tool calls (or one
+ * huge tool output) balloons context, cost, and latency turn over turn. When the
+ * transcript exceeds this estimate, drop the OLDEST whole turns (keeping the
+ * initial prompt + the most recent turns) so the request stays bounded. This is
+ * the in-harness analog of provider-side compaction.
+ */
+const MAX_HISTORY_TOKENS = 48_000;
+
+/**
+ * Keep the first message (the task prompt) plus the most recent whole turns that
+ * fit under maxTokens. A "turn" is a user/assistant message plus the toolResult
+ * messages that follow it, kept together so no toolCall is orphaned from its
+ * result (which providers reject).
+ */
+export function boundHistory(messages: Message[], maxTokens = MAX_HISTORY_TOKENS): Message[] {
+  const est = (m: Message): number => estimateTokens(JSON.stringify(m));
+  const total = messages.reduce((s, m) => s + est(m), 0);
+  if (total <= maxTokens || messages.length <= 2) return messages;
+
+  // Group into turns: a non-toolResult message starts a turn; toolResults attach.
+  const turns: Message[][] = [];
+  for (const m of messages) {
+    if (m.role === "toolResult" && turns.length > 0) turns[turns.length - 1]!.push(m);
+    else turns.push([m]);
+  }
+  if (turns.length <= 2) return messages;
+
+  const first = turns[0]!;
+  let used = first.reduce((s, m) => s + est(m), 0);
+  const keptTail: Message[][] = [];
+  for (let i = turns.length - 1; i >= 1; i--) {
+    const t = turns[i]!;
+    const cost = t.reduce((s, m) => s + est(m), 0);
+    if (used + cost > maxTokens && keptTail.length > 0) break;
+    keptTail.unshift(t);
+    used += cost;
+  }
+  return [...first, ...keptTail.flat()];
+}
 /**
  * Hard cap on output tokens per LLM call. Without this, providers pre-authorize
  * the model's full max output (e.g. 32k for Opus → ~$2.40), which both wastes
@@ -75,6 +117,8 @@ export class PiEngine implements Engine {
       initialState: { systemPrompt: req.systemPrompt, model, tools },
       getApiKey: () => req.model.apiKey,
       streamFn,
+      // Bound the transcript before each provider request (context/cost guard).
+      transformContext: async (messages) => boundHistory(messages as Message[]) as typeof messages,
     });
     state.agent = agent;
 

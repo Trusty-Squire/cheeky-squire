@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ToolExecutor } from "../../src/engine/tools.js";
+import { ToolExecutor, clampOutput } from "../../src/engine/tools.js";
 
 let cwd: string;
 beforeEach(() => {
@@ -60,6 +60,25 @@ describe("ToolExecutor", () => {
     const bash = await exec.execute("bash", { command: "echo hi" });
     expect(bash.ok).toBe(true);
     expect(bash.output).toMatch(/hi/);
+  });
+
+  it("clamps a huge bash output so it can't balloon the agent context", async () => {
+    const exec = new ToolExecutor(cwd, { blastRadius: ["**"] });
+    // ~400KB of output
+    const r = await exec.execute("bash", { command: "for i in $(seq 1 40000); do echo xxxxxxxxxx; done" });
+    expect(r.ok).toBe(true);
+    expect(Buffer.byteLength(r.output, "utf8")).toBeLessThan(13_000);
+    expect(r.output).toMatch(/omitted to bound context/);
+  });
+
+  it("clampOutput keeps head + tail and marks the omission", () => {
+    const big = "A".repeat(50_000) + "ZZZ";
+    const clamped = clampOutput(big);
+    expect(clamped.length).toBeLessThan(13_000);
+    expect(clamped.startsWith("AAAA")).toBe(true);
+    expect(clamped.endsWith("ZZZ")).toBe(true);
+    expect(clamped).toMatch(/bytes of output omitted/);
+    expect(clampOutput("small")).toBe("small");
   });
 
   it("honors the denylist", async () => {

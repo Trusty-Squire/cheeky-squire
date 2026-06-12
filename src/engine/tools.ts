@@ -34,6 +34,26 @@ interface BashArgs {
 }
 
 const BASH_TIMEOUT_MS = 2 * 60 * 1000;
+/**
+ * Cap on a single tool's output (read contents, bash stdout/stderr) before it
+ * enters the agent's message history. A `find /` or `ls /tmp` can dump tens of
+ * thousands of tokens that then get re-sent every turn; this bounds it.
+ */
+const MAX_TOOL_OUTPUT_BYTES = 12_000;
+
+/** Truncate to a byte cap, keeping the head and tail with a middle marker. */
+export function clampOutput(s: string, max = MAX_TOOL_OUTPUT_BYTES): string {
+  if (Buffer.byteLength(s, "utf8") <= max) return s;
+  const head = Math.floor(max * 0.7);
+  const tail = max - head - 64;
+  const buf = Buffer.from(s, "utf8");
+  const omitted = buf.length - head - tail;
+  return (
+    buf.subarray(0, head).toString("utf8") +
+    `\n…[${omitted} bytes of output omitted to bound context]…\n` +
+    buf.subarray(buf.length - tail).toString("utf8")
+  );
+}
 
 /**
  * The one place writes happen. Blast-radius and denylist are enforced here,
@@ -78,7 +98,7 @@ export class ToolExecutor {
     }
     try {
       const contents = readFileSync(located.abs, "utf8");
-      return { ok: true, denied: false, path: located.rel, output: contents };
+      return { ok: true, denied: false, path: located.rel, output: clampOutput(contents) };
     } catch (err) {
       return { ok: false, denied: false, path: located.rel, output: `read failed: ${(err as Error).message}` };
     }
@@ -137,7 +157,7 @@ export class ToolExecutor {
         ok: result.exitCode === 0 && !result.timedOut,
         denied: false,
         command,
-        output: output || `(exit ${result.exitCode ?? "?"})`,
+        output: clampOutput(output || `(exit ${result.exitCode ?? "?"})`),
       };
     } catch (err) {
       return { ok: false, denied: false, command, output: `bash failed: ${(err as Error).message}` };
