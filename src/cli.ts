@@ -24,6 +24,10 @@ async function main(argv: string[]): Promise<number> {
       return cmdExperiment(rest);
     case "validate":
       return cmdValidate(rest);
+    case "do":
+      return cmdDo(rest);
+    case "fix":
+      return cmdFix(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -45,6 +49,8 @@ function printUsage(): void {
       "  ser run <mission.yaml> [--mock] [--chain <name>] [--sandbox]",
       "  ser derive \"<goal>\" [--chain <name>] [--yes] [--out <file>]",
       "  ser trace <trace.jsonl>",
+      "  ser do \"<goal>\" [--gate <cmd>] [--radius <glob>] [--budget <usd>]",
+      "  ser fix \"<bug>\" [--test-cmd <cmd>] [--test-file <path>]",
       "  ser validate <mission.yaml> [--chains <file>]",
       "  ser experiment [-- <experiment args>]",
       "",
@@ -99,10 +105,19 @@ async function cmdRun(args: string[]): Promise<number> {
   if (!existsSync(missionAbs)) throw new SquireError("MISSION_NOT_FOUND", `mission not found: ${missionAbs}`);
   const missionDir = dirname(missionAbs);
   const mission = parseMission(readFileSync(missionAbs, "utf8"), missionAbs);
+  return executeMissionObject(mission, missionDir, flags, basename(missionAbs).replace(/\.[^.]+$/, ""));
+}
+
+/** Shared execution core for run/do/fix: workdir prep, engine, adjudicator, result. */
+async function executeMissionObject(
+  mission: ReturnType<typeof parseMission>,
+  missionDir: string,
+  flags: Flags,
+  missionBaseName: string,
+): Promise<number> {
   const { chains } = loadChains(missionDir, flags.value.get("chains"));
   const chainName = flags.value.get("chain") ?? mission.chain;
   const chain = resolveChain(chains, chainName);
-
   const declaredWorkdir = resolve(missionDir, mission.workdir);
   const useMock = flags.bool.has("mock");
 
@@ -127,7 +142,7 @@ async function cmdRun(args: string[]): Promise<number> {
     );
   }
 
-  const missionId = `${basename(missionAbs).replace(/\.[^.]+$/, "")}-${chainName}-${Date.now().toString(36)}`;
+  const missionId = `${missionBaseName}-${chainName}-${Date.now().toString(36)}`;
   const tracePath = join(workdir, ".squire", `trace-${missionId}.jsonl`);
 
   let engine: Engine;
@@ -183,6 +198,38 @@ async function cmdRun(args: string[]): Promise<number> {
   }
   process.stdout.write(`\nMISSION HALTED — ${result.haltReason}\ntrace: ${tracePath}\n`);
   return 1;
+
+}
+
+async function cmdDo(args: string[]): Promise<number> {
+  const flags = parseFlags(args, ["chain", "chains", "harness", "gate", "radius", "budget"]);
+  const goal = flags.positional[0];
+  if (!goal) throw new SquireError("USAGE", 'ser do "<goal>" [--gate <cmd>] [--radius <glob>]');
+  const { buildDoMission } = await import("./contract/packs.js");
+  const workdir = process.cwd();
+  const mission = buildDoMission(goal, workdir, {
+    gate: flags.value.get("gate"),
+    radius: flags.value.get("radius") ? [flags.value.get("radius")!] : undefined,
+    budgetUsd: flags.value.get("budget") ? Number(flags.value.get("budget")) : undefined,
+    chain: flags.value.get("chain"),
+  });
+  return executeMissionObject(mission, workdir, flags, "do");
+}
+
+async function cmdFix(args: string[]): Promise<number> {
+  const flags = parseFlags(args, ["chain", "chains", "harness", "test-cmd", "test-file", "radius", "budget"]);
+  const bug = flags.positional[0];
+  if (!bug) throw new SquireError("USAGE", 'ser fix "<bug description>" [--test-cmd <cmd>] [--test-file <path>]');
+  const { buildFixMission } = await import("./contract/packs.js");
+  const workdir = process.cwd();
+  const mission = buildFixMission(bug, workdir, {
+    testCmd: flags.value.get("test-cmd"),
+    testFile: flags.value.get("test-file"),
+    radius: flags.value.get("radius") ? [flags.value.get("radius")!] : undefined,
+    budgetUsd: flags.value.get("budget") ? Number(flags.value.get("budget")) : undefined,
+    chain: flags.value.get("chain"),
+  });
+  return executeMissionObject(mission, workdir, flags, "fix");
 }
 
 async function cmdTrace(args: string[]): Promise<number> {
