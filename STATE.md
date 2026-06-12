@@ -1,40 +1,38 @@
 # STATE.md
 
-## v0.1 — done (all six gates, real benchmark run)
-- Harness + real PiEngine + derive + 10-task benchmark. Cheap chain matched
-  opus 25/25 nodes at ~31x lower cost (RESULTS.md). Found+fixed the unbounded
-  max_tokens bug live.
+## v0.1 / v0.1.1 — done
+Harness, real engine, 20-task benchmark, ablation (35%→100%), opus parity at
+~1/25th cost (RESULTS.md), audit + hardened gates, rebrand to Castellan
+(binary `ser`), thesis: cheap and reliable makes loops.
 
-## v0.1.1 — done (ablation + hard benchmark), all gates green
-- Phase A — trace audit: finding #0 (traces weren't archived → now archived to
-  results/<runId>/<task>-<chain>.jsonl). Adversarially audited 08/09/10; found +
-  fixed 11 gameable gates across 03/05/06/08/09/10 (varied-input behavior gates,
-  fail-against-stub for tests-first, mutation guards for write-test nodes).
-  AUDIT.md records findings + verdict; every null solution re-verified blocked.
-- Phase B — ablation: `--harness off` raw mode (one goal-only attempt, then
-  score every node's done_check; no nodes/gates/checkpoints/blast/escalation) +
-  `cheap-raw` chain alias + chain.harness schema field + demo raw gate (4b).
-- Phase C — tasks 11–20 (hard): long-horizon consistency (8), 50-file localize,
-  12+ call-site migration, poisoned dependency (caught at node 4, verified),
-  ambiguous-brief-by-SPEC, test-first pair, two-package workspace (10), perf
-  gate, dependency upgrade + lockfile, 15-node mega-mission. Each: fixture +
-  mission + README (failure mode) + anti-gaming gates + reference mock scripts.
-  All pass --mock 100% (54 nodes). scripts/calibrate.ts (live, human-run;
-  flags any task ≥90% complete).
-- Phase D — experiment.ts: 20 tasks × {cheap-raw, cheap, knight-only}; columns
-  recovered/rungHist/confab/blastBlocks/trace; verdict leads with the ablation
-  delta + cost per COMPLETED mission. --dry-run validates 20 fixtures + 3-chain
-  schema. --mock defaults to the two scripted chains (raw is a live ablation).
-- Phase E — CLAUDE.md success contract updated (gate 4b raw demo; gate 5 = 20
-  tasks + 3-chain schema). README: three-column placeholder table + ablation
-  methodology. All 7 checks green (1 test, 2 typecheck, 3 lint, 4 demo, 4b raw
-  demo, 5 dry-run, 6 no-network).
+## v0.2 — planning layer BUILT (this session); live measurements pending
+Per SPEC-v0.2:
+- Gate ladder: schema v2 (gate objects, max_human_checks), executeGate for all
+  four tiers — human gates pause/record/escalate (success gate #5 ✅ via
+  tests), judge soft-only with judge_flag.
+- Gate-pattern library: 10 patterns, each citing the measured failure that
+  created it; renders validate against GateSchema.
+- derive-v2 herald pipeline: 7 stages, spec-acceptance-wins gate inference,
+  adversarial lenses w/ evidence-required refutations, tier-0 refusal w/ 3
+  remediations, --judge mode. CLI routed.
+- ser spec: spec.yaml schema + SpecSession delta loop (bounded context proven
+  by test, git-checkpointed accepts, rejection-escalation), checkSpec gates,
+  verifyClaim lenses. CLI: init|check|verify|talk.
+- ser do / ser fix mission packs (mechanical, refuse-if-ungated).
+- Benches built (not run live): derive-bench (planner tax), poker-bench
+  (5 infeasible + 2 controls), gate-attack (hermetic; 0 fails on tasks 1-5,
+  1 legit warn on the refactor task).
+- 138 hermetic tests; zero network; CI green.
 
-## Blocked
-- none
+## Live runs pending (human/key)
+1. Cross-executor gauntlet — RUNNING in background (glm/kimi/deepseek × 20
+   tasks; flawless through ~task 9 at last check). Results → RESULTS.md +
+   pillar-3 wording per SPEC-v0.2 §9.6.
+2. `pnpm derive-bench --tasks 1..20` — the planner tax (THE v0.2 bet).
+3. `pnpm poker-bench` — refusal quality.
+4. ser spec dogfood (success gate #4): write the v0.3 leaderboard spec with
+   `ser spec talk`.
 
-## Next (handed to the human)
-- `pnpm experiment --tasks 1..20` (full matrix, ~live) for the real v0.1.1 table,
-  and `pnpm calibrate --tasks 11..20 --chain cheap` to confirm the hard tasks
-  actually separate cheap-raw from cheap. Fill the README placeholder table from
-  the results.
+## Next
+Run live gates 2-3 above; then v0.3 centerpiece per thesis: the standing-loop
+runtime (triggers, queue, recurring missions).

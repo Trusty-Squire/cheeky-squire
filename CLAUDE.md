@@ -41,8 +41,18 @@ proceed.
    fixtures + missions AND resolves the three-chain schema
    (cheap-raw, cheap, knight-only), prints the result table
    schema, exit 0
+4c. Human-gate demo: vitest covers a tier-4 mission end-to-end
+   (approve commits; rejection drives rung-2 with the reason in
+   FAILURE CONTEXT; unattended throws) — test/harness/human-gate.test.ts
+4d. `pnpm gate-attack --tasks 1..20` — hermetic null-solution attacks
+   (vacuous-pass, guard-tamper): zero FAILs
+5b. derive-v2 pipeline + ser spec + packs covered by hermetic MockLlm
+   tests (poker refusal path included)
 6. Zero network calls in tests. `OPENROUTER_API_KEY` must not
-   be required for gates 1–5.
+   be required for gates 1–5b.
+7. LIVE gates (human-run, recorded in RESULTS.md when run):
+   `pnpm derive-bench` (planner tax <=10pts), `pnpm poker-bench`
+   (>=4/5 caught, <=1 spurious), cross-executor gauntlet.
 
 ## Architecture invariants (do not violate)
 - ALL model calls behind `LlmClient`; MockLlm in tests.

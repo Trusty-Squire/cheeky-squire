@@ -101,6 +101,25 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   `results/<runId>/<task>-<chain>.jsonl` before the temp workdir is reaped
   (results/ is gitignored; archiving is the audit trail).
 
+## v0.2 build decisions
+- A23. Raw-mode (harness off) scoring treats human gates as not-passed with a
+  note: unattended scoring cannot adjudicate. Judge gates score soft.
+- A24. `ser do` quick mode defaults to an OPEN blast radius ("**") — single
+  supervised goal with the user present; tighten with --radius. Gate is
+  inferred mechanically from repo check commands; no detectable gate = refusal
+  (never an ungated node).
+- A25. `ser fix` repro gates demand an assertion-failure signature
+  (AssertionError|expected|FAIL) and reject ENOENT — the dogfood
+  poisoned-fixture lesson applied to bug repros.
+- A26. Spec drift flags are proposer-marked only in v0.2; a mechanical
+  NLI-style thesis-contradiction check is v0.3.
+- A27. v0.2's working definition of a "verified" ledger claim is
+  adversarial-survival: it survived the feasibility-arithmetic and prior-art
+  refutation lenses, with the lens trail recorded as evidence. No live web
+  retrieval ships in v0.2 core; lenses run on model knowledge + arithmetic
+  (sufficient for the poker class; insufficient for fast-moving facts — known
+  limitation).
+
 ## CLI
 - A17. Commands: `run <mission> [--mock] [--chain <name>]`,
   `derive "<goal>" [--yes] [--chain <name>]`, `trace <file>`,
