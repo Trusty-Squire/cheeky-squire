@@ -171,6 +171,9 @@ async function cmdRun(args: string[]): Promise<number> {
     apiKey: process.env.OPENROUTER_API_KEY,
     baseUrl: process.env.OPENROUTER_BASE_URL,
     log: (line) => process.stdout.write(line + "\n"),
+    // Tier-4 human gates: interactive prompt when a TTY is attached; absent
+    // otherwise so unattended runs fail loudly instead of self-approving.
+    adjudicate: process.stdin.isTTY ? promptAdjudicator(workdir) : undefined,
   });
 
   process.stdout.write("\n" + summarizeTrace(tracePath) + "\n");
@@ -230,6 +233,30 @@ async function cmdValidate(args: string[]): Promise<number> {
   
   // Return exit code 0 when the report is ok (warnings alone are fine), 1 otherwise
   return errorCount > 0 ? 1 : 0;
+}
+
+
+/** Interactive tier-4 adjudicator: show the artifact path, take approve/reject + reason. */
+function promptAdjudicator(workdir: string): import("./harness/gates.js").Adjudicator {
+  return async ({ nodeId, artifact }) => {
+    process.stdout.write(`\n[human gate] node "${nodeId}" — review artifact: ${join(workdir, artifact)}\n`);
+    const answer = await ask(`approve? [y/N + optional reason]: `);
+    const approved = /^y(es)?\b/i.test(answer.trim());
+    const reason = answer.trim().replace(/^y(es)?\s*/i, "").replace(/^n(o)?\s*/i, "") || (approved ? "approved" : "rejected");
+    return { approved, reason, by: process.env.USER ?? "human" };
+  };
+}
+
+function ask(prompt: string): Promise<string> {
+  return new Promise((resolveP) => {
+    process.stdout.write(prompt);
+    process.stdin.resume();
+    process.stdin.setEncoding("utf8");
+    process.stdin.once("data", (d) => {
+      process.stdin.pause();
+      resolveP(String(d));
+    });
+  });
 }
 
 main(process.argv.slice(2))

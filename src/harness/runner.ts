@@ -1,11 +1,10 @@
 import type { ChainsFile, Mission } from "../contract/schema.js";
 import { resolveChain, topoSort, effectiveGate, type MissionNode } from "../contract/schema.js";
-import { SquireError } from "../errors.js";
 import type { Engine, AttemptRecord, ToolCallRecord, ToolName } from "../engine/types.js";
 import { Trace } from "./trace.js";
 import { packContext } from "./context.js";
 import { reconcile } from "./reconcile.js";
-import { runGate, DEFAULT_GATE_TIMEOUT_MS } from "./gates.js";
+import { executeGate, DEFAULT_GATE_TIMEOUT_MS, type Adjudicator } from "./gates.js";
 import { BudgetMeter } from "./budget.js";
 import { ladder, buildFailureContext, type FailureInfo } from "./escalate.js";
 import {
@@ -29,18 +28,9 @@ Your final message: one short paragraph stating what changed
 your tool calls are audited against your claims.`;
 
 
-/**
- * The shell command for a node's gate. command/metric gates execute as v0.1
- * done_checks did. human/judge gates need runner adjudication support (next
- * slice) — until then they fail LOUDLY rather than silently passing.
- */
+/** Command string for reconcile's confabulation matching ("" for human/judge gates). */
 function gateCommandOf(node: MissionNode): string {
-  const gate = effectiveGate(node);
-  if (gate.type === "command" || gate.type === "metric") return gate.run!;
-  throw new SquireError(
-    "GATE_TYPE_UNSUPPORTED",
-    `node "${node.id}" uses a ${gate.type} gate; runner support lands in the v0.2 runner slice`,
-  );
+  return effectiveGate(node).run ?? "";
 }
 
 export interface NodeOutcome {
@@ -81,6 +71,8 @@ export interface RunMissionOptions {
   log?: (line: string) => void;
   /** Override the chain's harness mode. "off" runs the ablation (raw, goal-only). */
   harnessMode?: "on" | "off";
+  /** Tier-4 human-gate adjudicator (SPEC-v0.2 §4). Absent in unattended contexts. */
+  adjudicate?: Adjudicator;
 }
 
 /**
@@ -262,21 +254,37 @@ export async function runMission(opts: RunMissionOptions): Promise<MissionResult
         });
       }
 
-      const gate = await runGate(gateCommandOf(node), workdir, gateTimeoutMs);
+      const gate = await executeGate(effectiveGate(node), {
+        cwd: workdir,
+        nodeId: node.id,
+        brief: node.brief,
+        timeoutMs: gateTimeoutMs,
+        adjudicate: opts.adjudicate,
+      });
       outcome.gateExitCode = gate.exitCode;
       trace.append("gate", {
         nodeId: node.id,
         rung: rung.rung,
         payload: {
           command: gate.command,
+          gateType: gate.gateType ?? "command",
           exitCode: gate.exitCode,
           passed: gate.passed,
           timedOut: gate.timedOut,
           stdoutTail: gate.stdoutTail,
           stderrTail: gate.stderrTail,
+          verdict: gate.verdict ?? null,
         },
         costUsdSoFar: budget.globalSpent(),
       });
+      if (gate.judgeFlag) {
+        trace.append("judge_flag", {
+          nodeId: node.id,
+          rung: rung.rung,
+          payload: { flag: gate.judgeFlag },
+          costUsdSoFar: budget.globalSpent(),
+        });
+      }
 
       const nodeBudgetHit = consumed.nodeBudgetExceeded;
       // A node whose gate PASSED is done and verified — commit it even if the
@@ -478,7 +486,28 @@ async function runRaw(
   const committed = new Set<string>();
   const outcomes: NodeOutcome[] = [];
   for (const node of mission.nodes) {
-    const gate = await runGate(gateCommandOf(node), workdir, gateTimeoutMs);
+    const g = effectiveGate(node);
+    // Raw scoring is unattended by definition: human gates score as not-passed
+    // with a note (A23); judge gates are soft and score as passed-with-flag.
+    const gate =
+      g.type === "human" && !opts.adjudicate
+        ? {
+            command: `human:${g.artifact}`,
+            passed: false,
+            exitCode: 1,
+            timedOut: false,
+            stdoutTail: "",
+            stderrTail: "human gate unscoreable in unattended raw mode",
+            durationMs: 0,
+            gateType: "human" as const,
+          }
+        : await executeGate(g, {
+            cwd: workdir,
+            nodeId: node.id,
+            brief: node.brief,
+            timeoutMs: gateTimeoutMs,
+            adjudicate: opts.adjudicate,
+          });
     trace.append("gate", {
       nodeId: node.id,
       rung: 1,
