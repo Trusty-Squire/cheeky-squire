@@ -33,12 +33,19 @@ nodes:
       knight } }, prices: {...} }. Import with the .js extension exactly like
       the existing tests do (e.g. import { validateMissionFile } from
       "../../src/contract/validate.js"). Use describe/it/expect from vitest.
-      The implementation does not exist yet, so this suite MUST currently fail.
+      The implementation does not exist yet, so this suite MUST currently fail —
+      and it must fail ONLY because src/contract/validate.ts is missing, never
+      because of a broken fixture. In particular: when writing fixture files
+      into nested directories (e.g. <tmp>/src/dummy.txt), you MUST create the
+      directory first with mkdirSync(path, { recursive: true }) before any
+      writeFileSync into it. The gate rejects the node if the suite's failure
+      output contains ENOENT (a fixture crash) instead of the missing-module
+      error.
     context_globs:
       - "test/contract/schema.test.ts"
       - "src/contract/schema.ts"
     blast_radius: ["test/contract/**"]
-    done_check: "test -f test/contract/validate.test.ts && grep -q validateMissionFile test/contract/validate.test.ts && ! pnpm vitest run test/contract/validate.test.ts"
+    done_check: "test -f test/contract/validate.test.ts && grep -q validateMissionFile test/contract/validate.test.ts && ! pnpm vitest run test/contract/validate.test.ts > /tmp/dogfood-gate1.txt 2>&1 && grep -q 'Failed to load url' /tmp/dogfood-gate1.txt && ! grep -q ENOENT /tmp/dogfood-gate1.txt"
     budget_usd: 0.40
 
   - id: implement
