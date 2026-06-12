@@ -316,16 +316,18 @@ async function cmdSpec(args: string[]): Promise<number> {
         if (d.value) process.stdout.write(`      ${JSON.stringify(d.value).slice(0, 140)}\n`);
       }
       if (batch.note) process.stdout.write(`  ${batch.note}\n`);
-      if (batch.question) process.stdout.write(`  ? ${batch.question}\n`);
-      if (batch.deltas.length === 0) continue;
-      const a = (await ask("  apply? [y/N] ")).trim();
-      if (/^y/i.test(a)) {
-        await session.accept(batch);
-        process.stdout.write("  applied + committed\n");
-      } else {
-        session.reject();
-        process.stdout.write(`  rejected (next turn on ${session.currentModel()})\n`);
+      if (batch.deltas.length > 0) {
+        const a = (await ask("  save these edits? [y/N] ")).trim();
+        if (/^y/i.test(a)) {
+          await session.accept(batch);
+          process.stdout.write("  saved + committed\n");
+        } else {
+          session.reject();
+          process.stdout.write(`  rejected (next turn on ${session.currentModel()})\n`);
+        }
       }
+      // ser's one question leads into YOUR next message — answer it (or ignore it) at you>
+      if (batch.question) process.stdout.write(`\nser asks: ${batch.question}\n`);
     }
   }
 
