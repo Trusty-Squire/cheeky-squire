@@ -203,6 +203,10 @@ function buildModel(ref: ModelRef): Model<"openai-completions"> {
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 128_000,
     maxTokens: 8_192,
+    // NOTE: do NOT set openRouterRouting.require_parameters — it demands
+    // endpoints support EVERY request param (incl. optional ones pi-ai sends)
+    // and 404s models like deepseek-v3.2 entirely. OpenRouter already filters
+    // by hard capabilities (tools) in default routing.
   };
 }
 
