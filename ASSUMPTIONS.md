@@ -131,6 +131,14 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   origin: "build it, report when done" — the sentence should work, mechanically.
 
 ## CLI
+- A29. The API key lives in ONE place: `~/.config/castellan/.env`
+  (override via $CASTELLAN_HOME or $XDG_CONFIG_HOME). `ser login` writes it
+  there (mode 600), preferring a key already in the environment so a scattered
+  project `.env.local` can be consolidated in one command. Env loading reads a
+  FIXED set — `<cwd>/.env.local`, `<cwd>/.env`, then the global file — and
+  NEVER walks up the directory tree (the old walk-up made the effective key
+  depend on cwd and on stray ancestor `.env` files; that footgun is gone). The
+  real process environment always wins over every file.
 - A17. Commands: `run <mission> [--mock] [--chain <name>]`,
   `derive "<goal>" [--yes] [--chain <name>]`, `trace <file>`,
   `experiment` (delegated to scripts/experiment.ts via pnpm). Top-level

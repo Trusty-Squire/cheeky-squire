@@ -34,6 +34,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdSpec(rest);
     case "talk":
       return cmdTalk(rest);
+    case "login":
+      return cmdLogin(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -52,6 +54,7 @@ function printUsage(): void {
       "ser — Castellan: verified coding agent. Specs compile to gated loops.",
       "",
       "Usage:",
+      "  ser login                 — store OPENROUTER_API_KEY in one place (~/.config/castellan/.env)",
       "  ser talk [x.spec.yaml]    — the unified interface: talk; check/derive/run happen behind it (creates the spec if absent)",
       "  ser run <mission.yaml> [--mock] [--chain <name>] [--sandbox]",
       "  ser derive \"<goal>\" [--chain <name>] [--yes] [--out <file>]",
@@ -375,6 +378,38 @@ async function cmdTalk(args: string[]): Promise<number> {
       process.stdout.write(`  [turn failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);
     }
   }
+}
+
+/**
+ * `ser login` — put OPENROUTER_API_KEY in ONE canonical place
+ * (~/.config/castellan/.env, mode 600) so every directory inherits it and
+ * no .env files need scattering. Prefers a key already in the environment
+ * (e.g. migrated from a project .env.local), else prompts. The key is read
+ * by the user's own CLI process and written straight to disk — it never
+ * passes through the model.
+ */
+async function cmdLogin(args: string[]): Promise<number> {
+  const { globalEnvPath, upsertEnvVar } = await import("./env.js");
+  const flags = parseFlags(args, []);
+  const target = globalEnvPath();
+  // A key picked up from a project .env.local during startup load is fine to
+  // migrate; an inherited shell export is too. Either way, consolidate it.
+  let key = process.env.OPENROUTER_API_KEY?.trim() ?? "";
+  const migrating = key.length > 0 && !flags.bool.has("prompt");
+  if (!migrating) {
+    key = (await ask("OpenRouter API key (sk-or-...): ")).trim();
+  }
+  if (!key) {
+    process.stderr.write("no key provided — nothing written\n");
+    return 1;
+  }
+  upsertEnvVar(target, "OPENROUTER_API_KEY", key);
+  const masked = key.length > 12 ? `${key.slice(0, 8)}…${key.slice(-4)}` : "(set)";
+  process.stdout.write(
+    `${migrating ? "consolidated" : "saved"} OPENROUTER_API_KEY (${masked}) to ${target} [mode 600]\n` +
+      `ser reads it from here in every directory — you can delete scattered .env keys now.\n`,
+  );
+  return 0;
 }
 
 async function cmdTrace(args: string[]): Promise<number> {
