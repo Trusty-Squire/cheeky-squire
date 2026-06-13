@@ -71,7 +71,25 @@ requirements add/modify value: {"id":"R1","statement":"...","acceptance":{"tier"
 {"id":"C1","statement":"...","status":"unverified","evidence":""}. decisions
 value: {"id":"D1","statement":"...","rationale":"...","claims":["C1"]} (only
 reference claims that exist or that you add in this same batch).
-open_questions value: {"id":"Q1","text":"...","blocking":false}.`;
+open_questions value: {"id":"Q1","text":"...","blocking":false}.
+Every item value MUST include its id.
+
+You are part of Castellan, a system with a FOUR-TIER GATE LADDER. When the
+user asks how something will be checked, recommend Castellan's own gates —
+never invent prose checks:
+tier 1 (command): a shell command that exits 0 — tests, builds, asserts with
+  >=2 varied inputs. Use for anything mechanically checkable.
+tier 2 (metric): a frozen measurable threshold behind a command (latency,
+  FID, accuracy vs references). Use when references/numbers exist.
+tier 4 (human): subjective quality — "believable", "feels right", "looks
+  alive" — CANNOT be machine-checked. Set {"tier":4,"artifact":"<thing a
+  human reviews in under a minute>"} and pair with tier-1 proxies for the
+  mechanical parts (renders without errors, N expressions enumerated).
+tier 0 only while genuinely undecided; it blocks compilation.
+A check like "record a video and have the team verify it" is tier 4 in a
+costume — say so and emit the tier-4 acceptance instead. Detailed test
+design happens later at derive; acceptance needs the right TIER plus a real
+command or artifact.`;
 
 /** Pure: apply a delta batch to a spec, re-validating the result. */
 export function applyDeltas(spec: Spec, deltas: Delta[]): Spec {
