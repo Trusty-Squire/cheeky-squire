@@ -201,9 +201,14 @@ export async function scoreSpec(
 
 /** One-line bar + the single next decision to surface, for the talk loop. */
 export function renderScoreLine(s: SpecScore): string {
-  const bar = `spec score: ${s.score}/100${s.ready ? " — READY to build" : ""}`;
-  if (s.ready || s.improvements.length === 0) return bar;
+  if (s.ready || s.improvements.length === 0) {
+    return `spec score: ${s.score}/100${s.ready ? " — READY to build" : ""}`;
+  }
+  // At low scores many blocking gaps all floor to 0, hiding progress — show the
+  // gap count so the loop's movement (gaps closing) is visible turn to turn.
+  const blocking = s.improvements.filter((i) => i.severity === "blocking").length;
+  const tally = `${s.improvements.length} gap(s)${blocking ? `, ${blocking} blocking` : ""}`;
   const top = s.improvements[0]!;
   const lead = top.needsUser ? "decision" : "suggestion";
-  return `${bar}\n  next ${lead} [${top.severity}/${top.dimension}]: ${top.problem}\n    → ${top.suggestion}`;
+  return `spec score: ${s.score}/100 (${tally})\n  next ${lead} [${top.severity}/${top.dimension}]: ${top.problem}\n    → ${top.suggestion}`;
 }

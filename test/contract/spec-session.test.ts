@@ -94,6 +94,29 @@ describe("SpecSession — the artifact is the state", () => {
     expect(log.stdout).toContain("spec(product.spec.yaml): 3 delta(s)");
   });
 
+  it("turn → acceptLenient lands a realistically SLOPPY mapper batch (dotted/omitted ids)", async () => {
+    // What the real cheap model actually emits: split a requirement with dotted
+    // ids, omit an id, carry an object thesis. All must land, none drop.
+    const sloppy = {
+      reply: "split into capabilities",
+      deltas: [
+        { section: "thesis", op: "modify", value: { statement: "a kids voice companion" } },
+        { section: "requirements", op: "add", value: { id: "R1.1", statement: "voice loop", acceptance: { tier: 1, gate: "node --test" } } },
+        { section: "requirements", op: "add", value: { statement: "safety", acceptance: { tier: 4, artifact: "s.md" } } },
+      ],
+    };
+    const llm = new MockLlm([{ text: JSON.stringify(sloppy) }]);
+    const s = new SpecSession({ path: specPath, llm, executorModel: "cheap/x", knightModel: "frontier/y" });
+    const batch = await s.turn("split it into voice and safety");
+    const { applied, dropped } = await s.acceptLenient(batch);
+    expect(dropped).toHaveLength(0); // nothing lost to sloppiness
+    expect(applied.length).toBeGreaterThanOrEqual(3);
+    const final = s.load();
+    expect(final.thesis).toBe("a kids voice companion");
+    expect(final.requirements.every((r) => /^R\d+$/.test(r.id))).toBe(true);
+    expect(final.requirements.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("bounded context: each turn sends current spec + last message only (no transcript)", async () => {
     const llm = new MockLlm([{ text: JSON.stringify(batchAddDecision) }, { text: JSON.stringify({ deltas: [], question: "", note: "" }) }]);
     const s = new SpecSession({ path: specPath, llm, executorModel: "cheap/x", knightModel: "frontier/y" });
@@ -229,6 +252,46 @@ open_questions:
     ]);
     expect(fixed[0]).toMatchObject({ op: "modify", id: "R1" });
     expect(applyDeltas(spec, fixed).requirements[0]!.statement).toBe("compile specs v2");
+  });
+
+  it("harness mints ids for adds that OMIT id entirely (model no longer assigns them)", async () => {
+    const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(baseSpec);
+    const fixed = normalizeDeltas(spec, [
+      { section: "requirements", op: "add", value: { statement: "voice", acceptance: { tier: 1, gate: "t" } }, drift: false },
+      { section: "requirements", op: "add", value: { statement: "safety", acceptance: { tier: 4, artifact: "a.md" } }, drift: false },
+    ]);
+    const next = applyDeltas(spec, fixed);
+    const ids = next.requirements.map((r) => r.id);
+    expect(ids.every((i) => /^R\d+$/.test(i))).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length); // distinct
+  });
+
+  it("an intra-batch decision keeps pointing at a claim added the same turn (handle remap)", async () => {
+    const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(baseSpec);
+    const fixed = normalizeDeltas(spec, [
+      // model uses a free-form handle "feasible" for the new claim, dotted/garbage id
+      { section: "claims", op: "add", value: { id: "feasible", statement: "GTO is tractable", status: "unverified", evidence: "" }, drift: false },
+      { section: "decisions", op: "add", value: { id: "d.x", statement: "use CFR", rationale: "r", claims: ["feasible"] }, drift: false },
+    ]);
+    const next = applyDeltas(spec, fixed);
+    const claimId = next.claims[0]!.id;
+    expect(claimId).toMatch(/^C\d+$/);
+    expect(next.decisions[0]!.id).toMatch(/^D\d+$/);
+    expect(next.decisions[0]!.claims).toEqual([claimId]); // reference rewritten to the minted id
+  });
+
+  it("an unresolvable remove/resolve drops silently instead of throwing", async () => {
+    const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(baseSpec);
+    const fixed = normalizeDeltas(spec, [
+      { section: "requirements", op: "remove", id: "R99", drift: false },
+      { section: "open_questions", op: "resolve", id: "Q1", drift: false },
+    ]);
+    // R99 removal dropped; Q1 resolve kept
+    expect(fixed).toHaveLength(1);
+    expect(fixed[0]).toMatchObject({ section: "open_questions", op: "resolve", id: "Q1" });
   });
 });
 

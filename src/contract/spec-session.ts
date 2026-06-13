@@ -277,24 +277,24 @@ function asString(value: unknown): string | null {
 }
 
 /**
- * Repair the cheap model's near-miss deltas so the user's words actually land
- * (dogfood: a `modify` with no id, or a thesis modify carrying an object,
- * silently dropped the user's stated goal and the bookkeeper then asked them
- * to repeat it). Conservative — it only fixes mechanical id/shape mistakes,
- * never invents content:
+ * Make the cheap model's deltas land. The HARNESS owns ids and shapes, not the
+ * model — so the whole class of id bugs (dotted R1.1, undefined, collisions)
+ * is repaired here rather than dropped. The model supplies content and may use
+ * ANY handle for a new item; this function mints the real id and rewrites any
+ * same-batch reference to it (a decision citing a claim added this turn keeps
+ * pointing at the right claim). It never invents content — only fixes shape:
  *  - thesis modify with a non-string value -> the extracted string.
- *  - list modify whose id is missing/unknown -> the id carried in value, or
- *    the TODO placeholder for requirements, else converted to an add.
- *  - requirement add/fill with no acceptance -> tier 0 (unanchored) so the
- *    statement is captured now and gated next.
+ *  - list add -> a fresh schema-valid id (the model's handle is remapped).
+ *  - list modify with a missing/unknown id -> the TODO placeholder for
+ *    requirements, a same-batch handle, else an upsert add.
+ *  - requirement add/fill with no acceptance -> tier 0 (captured now, gated next).
+ *  - decision.claims refs -> remapped through this batch's handle->id map.
  */
 export function normalizeDeltas(spec: Spec, deltas: Delta[]): Delta[] {
   const out: Delta[] = [];
   const reqs = spec.requirements as { id: string; statement: string }[];
   let placeholderId: string | undefined = reqs.find(isPlaceholderReq)?.id;
 
-  // Per-section id bookkeeping: a running set of taken ids (so a batch of adds
-  // gets distinct fresh ids) and an allocator for invalid/missing/colliding ones.
   const sections = ["requirements", "decisions", "claims", "open_questions"] as const;
   const taken: Record<string, Set<string>> = {};
   const alloc: Record<string, () => string> = {};
@@ -302,20 +302,28 @@ export function normalizeDeltas(spec: Spec, deltas: Delta[]): Delta[] {
     taken[s] = new Set(((spec as unknown as Record<string, { id: string }[]>)[s] ?? []).map((x) => x.id));
     alloc[s] = makeIdAllocator(s, taken[s]!);
   }
+  // handle (whatever the model called a new item) -> the real minted id.
+  const remap: Record<string, string> = {};
 
   const withAcceptance = (val: Record<string, unknown>, id: string): Record<string, unknown> => {
     const v: Record<string, unknown> = { ...val, id };
     if (v.acceptance === undefined) v.acceptance = { tier: 0 };
     return v;
   };
-  // Add to a list with a guaranteed-valid, non-colliding id (repairs R1.1, dupes, missing).
+  // Rewrite a decision's claim references through this batch's remap.
+  const fixClaims = (val: Record<string, unknown> | undefined): Record<string, unknown> | undefined => {
+    if (!val || !Array.isArray(val.claims)) return val;
+    return { ...val, claims: (val.claims as unknown[]).map((c) => (typeof c === "string" && remap[c]) || c) };
+  };
+  // Add to a list with a guaranteed-valid, non-colliding id; record the remap.
   const emitAdd = (d: Delta, val: Record<string, unknown> | undefined): void => {
     const section = d.section;
-    const provided = val?.id;
-    const id = validListId(section, provided) && !taken[section]!.has(provided as string)
-      ? ((taken[section]!.add(provided as string), provided as string))
-      : alloc[section]!();
-    const value = section === "requirements" ? withAcceptance(val ?? {}, id) : { ...(val ?? {}), id };
+    const provided = typeof val?.id === "string" ? (val.id as string) : undefined;
+    const keep = validListId(section, provided) && !taken[section]!.has(provided!);
+    const id = keep ? ((taken[section]!.add(provided!), provided!)) : alloc[section]!();
+    if (provided && provided !== id) remap[provided] = id;
+    let value: Record<string, unknown> = section === "requirements" ? withAcceptance(val ?? {}, id) : { ...(val ?? {}), id };
+    if (section === "decisions") value = fixClaims(value)!;
     out.push({ ...d, op: "add", id: undefined, value });
   };
 
@@ -336,28 +344,29 @@ export function normalizeDeltas(spec: Spec, deltas: Delta[]): Delta[] {
     const ids = taken[d.section]!;
     const val = d.value && typeof d.value === "object" ? (d.value as Record<string, unknown>) : undefined;
     const valId = typeof val?.id === "string" ? (val.id as string) : undefined;
+    // Resolve a referenced id: existing, or a same-batch handle we just minted.
+    const resolve = (id?: string): string | undefined =>
+      id && ids.has(id) ? id : id && remap[id] && ids.has(remap[id]!) ? remap[id] : undefined;
 
     if (d.op === "modify") {
-      const targetId = d.id && ids.has(d.id) ? d.id : valId && ids.has(valId) ? valId : undefined;
+      const targetId = resolve(d.id) ?? resolve(valId);
       if (targetId) {
-        out.push({ ...d, id: targetId, value: val ? { ...val, id: targetId } : d.value });
+        const value = fixClaims(val ? { ...val, id: targetId } : undefined) ?? d.value;
+        out.push({ ...d, id: targetId, value });
         continue;
       }
-      // No resolvable target. For requirements, fill the TODO placeholder.
       if (d.section === "requirements" && placeholderId) {
         out.push({ ...d, op: "modify", id: placeholderId, value: withAcceptance(val ?? {}, placeholderId) });
         placeholderId = undefined;
         continue;
       }
-      // Otherwise upsert: convert to an add with a guaranteed-valid id.
-      emitAdd(d, val);
+      emitAdd(d, val); // upsert
       continue;
     }
 
     if (d.op === "add") {
-      // An add of a real requirement while the placeholder still exists fills it
-      // (so we never keep a TODO R1 beside the real one).
       if (d.section === "requirements" && placeholderId && !isPlaceholderReq(val)) {
+        if (valId) remap[valId] = placeholderId;
         out.push({ ...d, op: "modify", id: placeholderId, value: withAcceptance(val ?? {}, placeholderId) });
         placeholderId = undefined;
         continue;
@@ -366,7 +375,10 @@ export function normalizeDeltas(spec: Spec, deltas: Delta[]): Delta[] {
       continue;
     }
 
-    out.push(d);
+    // remove / resolve: retarget to an existing or same-batch id; drop if unresolvable.
+    const targetId = resolve(d.id) ?? resolve(valId);
+    if (targetId) out.push({ ...d, id: targetId });
+    // unresolved remove/resolve is a no-op (the item never existed) — drop silently
   }
   return out;
 }

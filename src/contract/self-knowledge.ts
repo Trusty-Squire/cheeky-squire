@@ -43,15 +43,20 @@ export function gatePatternDoc(): string {
   );
 }
 
-export const SPEC_ITEM_SHAPES = `Spec item shapes (ids are EXACTLY R1,R2,... C1,... D1,... Q1,...; every item
-value MUST include its id):
-requirements: {"id":"R1","statement":"...","acceptance":{"tier":0}}
+export const SPEC_ITEM_SHAPES = `Spec item shapes:
+requirements: {"statement":"...","acceptance":{"tier":0}}
   (tier 1 = {"tier":1,"gate":"<shell cmd>"}; tier 2 = {"tier":2,"gate":"<metric cmd>"};
    tier 4 = {"tier":4,"artifact":"<path>"}; tier 0 only while undecided)
-claims: {"id":"C1","statement":"...","status":"unverified","evidence":""}
-decisions: {"id":"D1","statement":"...","rationale":"...","claims":["C1"]}
-  (only reference claims that exist or are added in the same batch)
-open_questions: {"id":"Q1","text":"...","blocking":false}
+claims: {"statement":"...","status":"unverified","evidence":""}
+decisions: {"statement":"...","rationale":"...","claims":[]}
+open_questions: {"text":"...","blocking":false}
+
+IDS: do NOT invent ids for NEW items — omit "id" on an add and the harness
+mints it (R1,R2,... C1,... D1,... Q1,...). To MODIFY/REMOVE/RESOLVE an
+existing item, reference its id exactly as it appears in the spec above. To
+reference a claim you are adding in the SAME batch, give that claim any handle
+as its "id" and cite the same handle in the decision's "claims" — the harness
+rewrites it. Never use dotted/sub ids like R1.1.
 Delta ops: add/modify/remove on any list section; resolve ONLY on
 open_questions (removes an answered question). A requirement is never "done"
 in the spec — completion is proven later, by its gate, at run time.`;
