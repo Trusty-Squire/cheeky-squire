@@ -174,7 +174,7 @@ export async function deriveV2(input: DeriveV2Input): Promise<DeriveV2Result> {
     llm,
     model,
     "decompose",
-    `${CASTELLAN_IDENTITY}\n\nYour role, the Herald: decompose work into 1-12 nodes forming a DAG. Briefs are self-contained (the executor sees ONLY the brief and its packed files). blast_radius is the narrowest glob set permitting the work. Distribute the budget. Do NOT write gates yet. Output ONLY JSON: {\"nodes\":[{id,brief,deps,context_globs,blast_radius,budget_usd,requirement?}]}.`,
+    `${CASTELLAN_IDENTITY}\n\nYour role, the Herald: decompose work into 1-12 nodes forming a DAG. Briefs are self-contained (the executor sees ONLY the brief and its packed files). blast_radius is the narrowest glob set permitting the work. Distribute the budget. Do NOT write gates yet. Output ONLY JSON: {"nodes":[{id,brief,deps,context_globs,blast_radius,budget_usd,requirement?}]}.`,
     `${intent}\n\nREPOSITORY SURVEY:\n${survey}\n\nMISSION BUDGET USD: ${input.budgetUsd}`,
     DecomposeSchema,
     usage,
