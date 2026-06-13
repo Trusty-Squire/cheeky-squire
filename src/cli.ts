@@ -283,9 +283,34 @@ async function cmdSpec(args: string[]): Promise<number> {
     return r.verdict === "verified" ? 0 : 1;
   }
 
+  if (sub === "score") {
+    const flags = parseFlags(args.slice(1), ["chain", "chains"]);
+    const file = flags.positional[0];
+    if (!file) throw new SquireError("USAGE", "ser spec score <x.spec.yaml>");
+    const spec = parseSpec(readFileSync(resolve(file), "utf8"), file);
+    const { scoreSpec, renderScoreLine } = await import("./contract/spec-score.js");
+    // Use the live diagnostician when a key is present; mechanical-only otherwise.
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    let s;
+    if (apiKey) {
+      const { OpenRouterClient } = await import("./llm/openrouter.js");
+      const { loadChainsForDerive } = await import("./contract/derive.js");
+      const chain = resolveChain(loadChainsForDerive(process.cwd(), flags.value.get("chains")), flags.value.get("chain") ?? "cheap");
+      const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
+      s = await scoreSpec(spec, { llm, model: chain.executor });
+    } else {
+      s = await scoreSpec(spec);
+    }
+    process.stdout.write(`${renderScoreLine(s)}\n`);
+    for (const imp of s.improvements.slice(1, 6)) {
+      process.stdout.write(`  [${imp.severity}/${imp.dimension}] ${imp.problem}\n    → ${imp.suggestion}\n`);
+    }
+    return s.ready ? 0 : 1;
+  }
+
   if (sub === "talk") return cmdTalk(args.slice(1));
 
-  throw new SquireError("USAGE", "ser spec init|check|verify|talk <x.spec.yaml>");
+  throw new SquireError("USAGE", "ser spec init|check|verify|score|talk <x.spec.yaml>");
 }
 
 /**
@@ -376,7 +401,23 @@ async function cmdTalk(args: string[]): Promise<number> {
           process.stdout.write(`  [${batch.action} failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);
         }
       }
-      if (batch.question) process.stdout.write(`? ${batch.question}\n`);
+      // Self-diagnose every turn: score the spec and surface the single next
+      // decision/suggestion. The loop drives the score up until build-ready.
+      let scored = false;
+      try {
+        const { scoreSpec, renderScoreLine } = await import("./contract/spec-score.js");
+        const { parseSpec: ps } = await import("./contract/spec.js");
+        const s = await scoreSpec(ps(readFileSync(session.path, "utf8"), session.path), {
+          llm,
+          model: chain.executor,
+        });
+        process.stdout.write(`${renderScoreLine(s)}\n`);
+        scored = true;
+      } catch {
+        // scoring is best-effort; never block the conversation on it
+      }
+      // The mapper's own question is a fallback only if scoring didn't surface one.
+      if (!scored && batch.question) process.stdout.write(`? ${batch.question}\n`);
     } catch (err) {
       // The conversation never dies for bookkeeping reasons.
       process.stdout.write(`  [turn failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);

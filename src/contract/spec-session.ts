@@ -34,7 +34,7 @@ export type Delta = z.infer<typeof DeltaSchema>;
 
 /** Harness commands the mapper may REQUEST (never perform): the unified
  * interface routes these mechanically — gates judge, the model never reports. */
-export const TALK_ACTIONS = ["none", "check", "verify", "derive", "run", "status"] as const;
+export const TALK_ACTIONS = ["none", "check", "verify", "derive", "run", "status", "score"] as const;
 
 export const DeltaBatchSchema = z.object({
   deltas: z.array(DeltaSchema),
@@ -65,8 +65,10 @@ but you can ask the HARNESS to act by setting "action" in your output:
   verify — adversarial lenses on one ledger claim (action_arg: the claim id)
   derive — compile the spec into a gated mission plan
   run    — execute the mission, gate-verified commits (the harness derives
-           first when the plan is stale and asks the user to confirm spend)
+           first when the plan is stale and asks the user to confirm spend;
+           it REFUSES if the spec readiness score is too low)
   status — spec summary + gates
+  score  — readiness score + the next gap to close (auto-shown each turn)
 Set an action ONLY when the user asks for that work ("build it" -> run;
 "is this ready?" -> check; "fact-check C2" -> verify). The harness executes
 and prints the results — gate verdicts, commits, costs. You NEVER claim work

@@ -131,6 +131,18 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   origin: "build it, report when done" — the sentence should work, mechanically.
 
 ## CLI
+- A32. Spec readiness is a SCORE the loop drives, not a one-time gate
+  (src/contract/spec-score.ts). Every talk turn self-diagnoses and prints
+  `spec score N/100` + the single next gap. The NUMBER is mechanical (fixed
+  severity weights: blocking 40, major 15, minor 5; READY_THRESHOLD 85; any
+  blocking gap caps ready=false) over objective facts — unanchored reqs,
+  blocking questions, unverified/refuted claims, single-requirement coarseness,
+  empty scope fence. The cheap LLM only DIAGNOSES (proposes improvements +
+  tags severity, needsUser true only for genuine forks); it cannot inflate the
+  number (honors "model never grades its own homework"). `ser talk`'s run
+  REFUSES below threshold and lists the gaps; `ser spec score <file>` is the
+  standalone readout (mechanical-only without a key). Weights/threshold are
+  v0.2 defaults, tunable.
 - A30. ser runs anywhere with no config: chains resolve via one
   resolveChains() — explicit --chains, cwd, workdir, global
   ~/.config/castellan/chains.yaml, then BUILT-IN defaults (src/contract/

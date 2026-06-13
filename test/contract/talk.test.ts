@@ -27,6 +27,21 @@ open_questions:
   - { id: Q1, text: "what hardware?", blocking: true }
 `;
 
+// Decomposed + gated + scoped → clears the readiness score mechanically.
+const buildReadySpec = `
+thesis: "a fox companion for kids"
+scope_fence:
+  - "no cloud — offline only"
+  - "no open web access"
+requirements:
+  - id: R1
+    statement: "voice interaction loop"
+    acceptance: { tier: 1, gate: "node --test loop" }
+  - id: R2
+    statement: "child-safe content"
+    acceptance: { tier: 4, artifact: "review.md" }
+`;
+
 const mission = `
 goal: "fox companion"
 budget_usd: 1
@@ -119,7 +134,7 @@ describe("dispatchAction (mechanical, no LLM unless the action needs one)", () =
     expect(lines[0]).toContain("nothing to verify");
   });
 
-  it("run on an unready spec refuses at the pre-gate — execute is never reached", async () => {
+  it("run on an unready spec is blocked by the readiness gate — execute is never reached", async () => {
     const p = join(dir, "x.spec.yaml");
     writeFileSync(p, unreadySpec);
     let executed = false;
@@ -128,13 +143,15 @@ describe("dispatchAction (mechanical, no LLM unless the action needs one)", () =
       confirm: async () => true,
     }));
     expect(executed).toBe(false);
-    expect(lines.join("\n")).toContain("refused");
-    expect(lines.join("\n")).toContain("UNANCHORED");
+    const txt = lines.join("\n");
+    expect(txt).toContain("not building yet");
+    expect(txt).toContain("score");
+    expect(txt).toContain("R1 has no objective check"); // the blocking gap is surfaced
   });
 
   it("run with a fresh mission asks to confirm spend; unconfirmed = cancelled", async () => {
     const p = join(dir, "x.spec.yaml");
-    writeFileSync(p, readySpec);
+    writeFileSync(p, buildReadySpec);
     const mp = missionPathFor(p);
     writeFileSync(mp, mission);
     const future = new Date(Date.now() + 60_000);
@@ -152,7 +169,7 @@ describe("dispatchAction (mechanical, no LLM unless the action needs one)", () =
 
   it("run confirmed executes the mission and reports the harness verdict", async () => {
     const p = join(dir, "x.spec.yaml");
-    writeFileSync(p, readySpec);
+    writeFileSync(p, buildReadySpec);
     const mp = missionPathFor(p);
     writeFileSync(mp, mission);
     const future = new Date(Date.now() + 60_000);

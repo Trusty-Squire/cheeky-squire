@@ -7,6 +7,7 @@ import { parseMission } from "./schema.js";
 import { parseSpec, unverifiedLoadBearing } from "./spec.js";
 import { checkSpec, verifyClaim, type DeltaBatch } from "./spec-session.js";
 import { deriveV2 } from "./derive2.js";
+import { scoreSpec, renderScoreLine, READY_THRESHOLD } from "./spec-score.js";
 
 /**
  * The unified interface (`ser talk`): one conversation across all tools.
@@ -118,6 +119,16 @@ export async function dispatchAction(
       return lines;
     }
 
+    case "score": {
+      const spec = parseSpec(readFileSync(ctx.specPath, "utf8"), ctx.specPath);
+      const s = await scoreSpec(spec, { llm: ctx.llm, model: ctx.executorModel });
+      lines.push(renderScoreLine(s));
+      for (const imp of s.improvements.slice(1, 6)) {
+        lines.push(`  [${imp.severity}/${imp.dimension}] ${imp.problem}\n    → ${imp.suggestion}`);
+      }
+      return lines;
+    }
+
     case "verify": {
       const spec = parseSpec(readFileSync(ctx.specPath, "utf8"), ctx.specPath);
       const claimId = arg || unverifiedLoadBearing(spec)[0]?.claim;
@@ -134,6 +145,21 @@ export async function dispatchAction(
 
     case "run": {
       if (!ctx.execute) return ["run is not available in this session"];
+      // Readiness is a gate: a thin spec compiles into a coarse, stub-passable
+      // plan. Refuse below threshold and surface the gaps to close first —
+      // this is the loop driving the score up before any money is spent.
+      const spec = parseSpec(readFileSync(ctx.specPath, "utf8"), ctx.specPath);
+      const s = await scoreSpec(spec, { llm: ctx.llm, model: ctx.executorModel });
+      if (!s.ready) {
+        lines.push(
+          `not building yet — spec score ${s.score}/100 (need ${READY_THRESHOLD}). Close these first:`,
+        );
+        for (const imp of s.improvements.slice(0, 4)) {
+          const lead = imp.needsUser ? "decide" : "ser can do";
+          lines.push(`  [${imp.severity}/${imp.dimension}, ${lead}] ${imp.problem}\n    → ${imp.suggestion}`);
+        }
+        return lines;
+      }
       let mp = missionPathFor(ctx.specPath);
       const stale = !existsSync(mp) || statSync(mp).mtimeMs < statSync(ctx.specPath).mtimeMs;
       if (stale) {
