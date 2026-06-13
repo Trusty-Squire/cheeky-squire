@@ -50,7 +50,7 @@ function printUsage(): void {
       "ser — Castellan: verified coding agent. Specs compile to gated loops.",
       "",
       "Usage:",
-      "  ser talk [x.spec.yaml]    — the unified interface: talk; check/derive/run happen behind it",
+      "  ser talk [x.spec.yaml]    — the unified interface: talk; check/derive/run happen behind it (creates the spec if absent)",
       "  ser run <mission.yaml> [--mock] [--chain <name>] [--sandbox]",
       "  ser derive \"<goal>\" [--chain <name>] [--yes] [--out <file>]",
       "  ser trace <trace.jsonl>",
@@ -250,18 +250,9 @@ async function cmdSpec(args: string[]): Promise<number> {
     const file = flags.positional[0];
     if (!file) throw new SquireError("USAGE", 'ser spec init <name.spec.yaml> --thesis "<one paragraph>"');
     if (existsSync(resolve(file))) throw new SquireError("SPEC_EXISTS", `${file} already exists`);
-    wf(
-      resolve(file),
-      stringify({
-        thesis: flags.value.get("thesis") ?? "TODO: one paragraph — pinned; drift is flagged against this",
-        scope_fence: [],
-        requirements: [{ id: "R1", statement: "TODO", acceptance: { tier: 0 } }],
-        decisions: [],
-        claims: [],
-        open_questions: [{ id: "Q1", text: "what is the first requirement's objective check?", blocking: true }],
-      }),
-    );
-    process.stdout.write(`initialized ${file} — talk with: ser spec talk ${file}\n`);
+    const { blankSpec } = await import("./contract/talk.js");
+    wf(resolve(file), stringify(blankSpec(flags.value.get("thesis"))));
+    process.stdout.write(`initialized ${file} — talk with: ser talk ${file}\n`);
     return 0;
   }
 
@@ -306,19 +297,10 @@ async function cmdSpec(args: string[]): Promise<number> {
 async function cmdTalk(args: string[]): Promise<number> {
   const flags = parseFlags(args, ["chain", "chains", "budget"]);
   const { SpecSession } = await import("./contract/spec-session.js");
-  const { dispatchAction } = await import("./contract/talk.js");
+  const { dispatchAction, ensureSpecFile } = await import("./contract/talk.js");
 
-  let file = flags.positional[0];
-  if (!file) {
-    const { readdirSync } = await import("node:fs");
-    const specs = readdirSync(process.cwd()).filter((f) => f.endsWith(".spec.yaml"));
-    if (specs.length === 1) file = specs[0]!;
-    else if (specs.length === 0) {
-      throw new SquireError("USAGE", 'no .spec.yaml here — start one: ser spec init <name.spec.yaml> --thesis "..."');
-    } else {
-      throw new SquireError("USAGE", `multiple specs here (${specs.join(", ")}) — ser talk <file>`);
-    }
-  }
+  const { path: specFile, created } = ensureSpecFile(process.cwd(), flags.positional[0]);
+  if (created) process.stdout.write(`new spec: ${specFile} — your first message pins the thesis.\n`);
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser talk");
   const { OpenRouterClient } = await import("./llm/openrouter.js");
@@ -328,7 +310,7 @@ async function cmdTalk(args: string[]): Promise<number> {
   const chain = resolveChain(chains, chainName);
   const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
   const session = new SpecSession({
-    path: resolve(file),
+    path: specFile,
     llm,
     executorModel: chain.executor,
     knightModel: chain.knight,

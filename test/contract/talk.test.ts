@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, writeFileSync, utimesSync } from "node:fs";
+import { mkdtempSync, writeFileSync, utimesSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dispatchAction, missionPathFor, type TalkActionContext } from "../../src/contract/talk.js";
-import { DeltaBatchSchema, salvageBatch } from "../../src/contract/spec-session.js";
+import { dispatchAction, missionPathFor, ensureSpecFile, blankSpec, type TalkActionContext } from "../../src/contract/talk.js";
+import { DeltaBatchSchema, salvageBatch, DELTA_MAPPER_PROMPT } from "../../src/contract/spec-session.js";
+import { parseSpec } from "../../src/contract/spec.js";
+import { SquireError } from "../../src/errors.js";
+import { stringify as yamlStringify } from "yaml";
 import type { LlmClient } from "../../src/llm/types.js";
 
 const readySpec = `
@@ -58,6 +61,38 @@ describe("the action field (mapper requests, harness executes)", () => {
     expect(salvageBatch({ action: "run", deltas: [] }).action).toBe("run");
     expect(salvageBatch({ action: "rm -rf /", deltas: [] }).action).toBe("none");
     expect(salvageBatch({ action: "verify", action_arg: "C2", deltas: [] }).action_arg).toBe("C2");
+  });
+});
+
+describe("ensureSpecFile (talk is always runnable)", () => {
+  it("empty directory: creates <dirname>.spec.yaml with valid TODO placeholders", () => {
+    const r = ensureSpecFile(dir);
+    expect(r.created).toBe(true);
+    expect(r.path.endsWith(".spec.yaml")).toBe(true);
+    const spec = parseSpec(readFileSync(r.path, "utf8"), r.path);
+    expect(spec.thesis).toContain("TODO");
+    expect(spec.requirements[0]!.acceptance.tier).toBe(0);
+  });
+
+  it("sole existing spec is picked up, not recreated", () => {
+    const p = join(dir, "x.spec.yaml");
+    writeFileSync(p, readySpec);
+    const r = ensureSpecFile(dir);
+    expect(r).toEqual({ path: p, created: false });
+    expect(readFileSync(p, "utf8")).toBe(readySpec); // untouched
+  });
+
+  it("explicit missing path is created; multiple specs without an arg throw", () => {
+    const r = ensureSpecFile(dir, "newidea.spec.yaml");
+    expect(r.created).toBe(true);
+    writeFileSync(join(dir, "other.spec.yaml"), readySpec);
+    expect(() => ensureSpecFile(dir)).toThrow(SquireError);
+  });
+
+  it("blankSpec round-trips through parseSpec and the mapper knows the TODO-seeding rule", () => {
+    const spec = parseSpec(yamlStringify(blankSpec("a fox companion")), "blank");
+    expect(spec.thesis).toBe("a fox companion");
+    expect(DELTA_MAPPER_PROMPT).toContain("TODO placeholder");
   });
 });
 

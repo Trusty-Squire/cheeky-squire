@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync } from "node:fs";
+import { dirname, basename, join, isAbsolute } from "node:path";
 import { stringify as yamlStringify } from "yaml";
+import { SquireError } from "../errors.js";
 import type { LlmClient } from "../llm/types.js";
 import { parseMission } from "./schema.js";
 import { parseSpec, unverifiedLoadBearing } from "./spec.js";
@@ -31,6 +32,43 @@ export interface TalkActionContext {
 
 export function missionPathFor(specPath: string): string {
   return specPath.replace(/\.spec\.yaml$/, "") + ".mission.yaml";
+}
+
+/** A fresh spec: TODO placeholders the conversation replaces (thesis pins
+ * from the first real idea; R1 stays tier 0 until a gate is decided). */
+export function blankSpec(thesis?: string): object {
+  return {
+    thesis: thesis ?? "TODO: one paragraph — pinned; drift is flagged against this",
+    scope_fence: [],
+    requirements: [{ id: "R1", statement: "TODO", acceptance: { tier: 0 } }],
+    decisions: [],
+    claims: [],
+    open_questions: [{ id: "Q1", text: "what is the first requirement's objective check?", blocking: true }],
+  };
+}
+
+/**
+ * Resolve the session's spec file: the explicit arg (created if missing),
+ * the sole *.spec.yaml in cwd, or a fresh one named after the directory.
+ * Talk is ALWAYS runnable — a missing spec is a reason to create one, not
+ * a usage error.
+ */
+export function ensureSpecFile(cwd: string, explicit?: string): { path: string; created: boolean } {
+  if (explicit) {
+    const p = isAbsolute(explicit) ? explicit : join(cwd, explicit);
+    if (existsSync(p)) return { path: p, created: false };
+    writeFileSync(p, yamlStringify(blankSpec()));
+    return { path: p, created: true };
+  }
+  const specs = readdirSync(cwd).filter((f) => f.endsWith(".spec.yaml"));
+  if (specs.length === 1) return { path: join(cwd, specs[0]!), created: false };
+  if (specs.length > 1) {
+    throw new SquireError("USAGE", `multiple specs here (${specs.join(", ")}) — ser talk <file>`);
+  }
+  const name = basename(cwd).replace(/[^a-zA-Z0-9._-]+/g, "-") || "product";
+  const p = join(cwd, `${name}.spec.yaml`);
+  writeFileSync(p, yamlStringify(blankSpec()));
+  return { path: p, created: true };
 }
 
 /** Compile the spec; returns the mission path on success, null on refusal. */

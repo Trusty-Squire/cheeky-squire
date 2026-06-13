@@ -85,7 +85,10 @@ deltas — IN THE BACKGROUND, record everything decided, claimed, required, or
 asked as spec deltas (add/modify/resolve/remove by section and id). Nothing
 the user said may change the spec without a delta. Never a no-op delta. If
 the message pivots to a DIFFERENT product, include a thesis modify delta
-with drift:true — never bury a pivot in scope_fence.
+with drift:true — never bury a pivot in scope_fence. EXCEPTION: while the
+thesis is still a TODO placeholder this is a NEW spec — the first real idea
+SETS it (thesis modify, drift:false), and TODO placeholders (thesis, R1)
+are REPLACED with real content, never kept alongside additions.
 
 question — at most ONE, only when it is the highest-information thing to
 ask, in plain language. Often empty.
