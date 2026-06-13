@@ -306,28 +306,37 @@ async function cmdSpec(args: string[]): Promise<number> {
       executorModel: chain.executor,
       knightModel: chain.knight,
     });
-    process.stdout.write("ser spec — the spec is the state; this conversation is disposable. empty line to exit.\n");
+    process.stdout.write("ser spec — talk normally; the notebook updates itself. 'undo' reverts, empty line exits.\n");
+    let undoStack: string[] = [];
     for (;;) {
       const msg = (await ask("you> ")).trim();
       if (!msg) return 0;
-      const batch = await session.turn(msg);
-      for (const d of batch.deltas) {
-        process.stdout.write(`  Δ ${d.section}.${d.op}${d.id ? " " + d.id : ""}${d.drift ? "  ⚠ drift vs thesis" : ""}\n`);
-        if (d.value) process.stdout.write(`      ${JSON.stringify(d.value).slice(0, 140)}\n`);
+      if (msg === "undo") {
+        const prev = undoStack.pop();
+        if (!prev) { process.stdout.write("  nothing to undo\n"); continue; }
+        const { writeFileSync: w } = await import("node:fs");
+        w(session.path, prev);
+        session.reject(); // repeated undos escalate the model
+        process.stdout.write(`  reverted (next turn on ${session.currentModel()})\n`);
+        continue;
       }
-      if (batch.note) process.stdout.write(`  ${batch.note}\n`);
+      const before = readFileSync(session.path, "utf8");
+      const batch = await session.turn(msg);
+      if (batch.reply) process.stdout.write(`\n${batch.reply}\n`);
       if (batch.deltas.length > 0) {
-        const a = (await ask("  save these edits? [y/N] ")).trim();
-        if (/^y/i.test(a)) {
+        try {
           await session.accept(batch);
-          process.stdout.write("  saved + committed\n");
-        } else {
-          session.reject();
-          process.stdout.write(`  rejected (next turn on ${session.currentModel()})\n`);
+          undoStack.push(before);
+          if (undoStack.length > 20) undoStack = undoStack.slice(-20);
+          const summary = batch.deltas
+            .map((d) => `${d.op === "add" ? "+" : d.op === "remove" ? "-" : "~"}${d.section}${d.id ? ":" + d.id : ""}${d.drift ? "⚠drift" : ""}`)
+            .join(" ");
+          process.stdout.write(`  [spec ${summary}]\n`);
+        } catch (err) {
+          process.stdout.write(`  [spec edits dropped: ${(err as Error).message.split("\n")[0]}]\n`);
         }
       }
-      // ser's one question leads into YOUR next message — answer it (or ignore it) at you>
-      if (batch.question) process.stdout.write(`\nser asks: ${batch.question}\n`);
+      if (batch.question) process.stdout.write(`? ${batch.question}\n`);
     }
   }
 

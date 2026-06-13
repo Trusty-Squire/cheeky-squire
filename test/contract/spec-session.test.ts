@@ -48,6 +48,7 @@ const batchAddDecision: DeltaBatch = {
     { section: "open_questions", op: "resolve", id: "Q1", drift: false },
   ],
   question: "should the hosted tier ship in v0.3?",
+  reply: "logged. receipts-first it is.",
   note: "mapped your pricing comment to D1 + resolved Q1",
 };
 

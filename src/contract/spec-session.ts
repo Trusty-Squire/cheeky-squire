@@ -35,27 +35,34 @@ export const DeltaBatchSchema = z.object({
   deltas: z.array(DeltaSchema),
   /** At most one terse question — the highest-information open one. */
   question: z.string().default(""),
-  /** ≤120 words outside the delta block. */
+  /** The conversational answer: substantive, brutally economical (<=80 words). */
+  reply: z.string().default(""),
+  /** Deprecated alias kept for compat. */
   note: z.string().default(""),
 });
 
 export type DeltaBatch = z.infer<typeof DeltaBatchSchema>;
 
 /** Appendix A (SPEC-v0.2) — delta-mapper instruction, draft. */
-export const DELTA_MAPPER_PROMPT = `You maintain a spec under construction. The spec is the only state; this
-conversation is disposable. For each user message, output:
-(1) a list of deltas to the spec (add/modify/resolve/remove, by section and
-id) in the structured format provided — nothing the user said may change the
-spec without appearing as a delta;
-(2) at most one question, chosen as the highest-information open question.
-If the user's message is about a DIFFERENT product/idea than the pinned
-thesis, propose a single thesis modify delta with drift:true (plus any
-follow-on deltas) so the pivot is explicit and acceptable — NEVER bury a
-pivot in scope_fence (the fence is for exclusions, not new ideas).
-Total reply <= 120 words outside the delta block. If a delta contradicts the
-pinned thesis, mark it drift:true rather than hiding the conflict. Never
-restate the spec. Never summarize the conversation.
-Output ONLY JSON: {"deltas":[{section,op,id?,value?,drift?}],"question":"","note":""}.`;
+export const DELTA_MAPPER_PROMPT = `You are a thought partner who is brutally economical with words, plus a
+silent bookkeeper. The spec below is the ONLY state; this conversation is
+disposable.
+
+For each user message output JSON:
+{"reply": "...", "deltas": [...], "question": ""}
+
+reply — actually engage: answer their question, reason, push back, propose.
+Hard cap 80 words. No preamble, no praise, no restating, no filler. If they
+ask how to build it, sketch the build in <=80 words.
+
+deltas — IN THE BACKGROUND, record everything decided, claimed, required, or
+asked as spec deltas (add/modify/resolve/remove by section and id). Nothing
+the user said may change the spec without a delta. Never a no-op delta. If
+the message pivots to a DIFFERENT product, include a thesis modify delta
+with drift:true — never bury a pivot in scope_fence.
+
+question — at most ONE, only when it is the highest-information thing to
+ask, in plain language. Often empty.`;
 
 /** Pure: apply a delta batch to a spec, re-validating the result. */
 export function applyDeltas(spec: Spec, deltas: Delta[]): Spec {
