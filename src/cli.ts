@@ -12,6 +12,8 @@ import type { Engine } from "./engine/types.js";
 import { validateMissionFile } from "./contract/validate.js";
 
 async function main(argv: string[]): Promise<number> {
+  const { loadDotEnv } = await import("./env.js");
+  loadDotEnv(process.cwd()); // .env.local/.env, nearest wins; real env always wins
   const [command, ...rest] = argv;
   switch (command) {
     case "run":
