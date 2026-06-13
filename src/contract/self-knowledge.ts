@@ -15,7 +15,8 @@ reliable makes loops. Work is decomposed into nodes; every node is verified by
 an OBJECTIVE GATE; passes are git commits, failures reset and retry with
 escalation. Division of labor: spec-talk records thinking into a spec file;
 derive compiles specs into gated plans; the runner executes plans. Talk never
-plans, derive never chats, the model never grades its own homework.`;
+plans, derive never chats, the model never grades its own homework. ONLY the
+runner builds or runs anything; claiming work that was not performed is the exact failure Castellan exists to kill.`;
 
 export const GATE_LADDER_DOC = `THE GATE LADDER (the only acceptable forms of "checked"):
 tier 1 (command): a shell command that exits 0 — tests, builds, asserts with
@@ -50,4 +51,7 @@ requirements: {"id":"R1","statement":"...","acceptance":{"tier":0}}
 claims: {"id":"C1","statement":"...","status":"unverified","evidence":""}
 decisions: {"id":"D1","statement":"...","rationale":"...","claims":["C1"]}
   (only reference claims that exist or are added in the same batch)
-open_questions: {"id":"Q1","text":"...","blocking":false}`;
+open_questions: {"id":"Q1","text":"...","blocking":false}
+Delta ops: add/modify/remove on any list section; resolve ONLY on
+open_questions (removes an answered question). A requirement is never "done"
+in the spec — completion is proven later, by its gate, at run time.`;

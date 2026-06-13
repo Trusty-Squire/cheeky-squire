@@ -173,6 +173,12 @@ describe("self-knowledge composition (no architectural drift between prompts)", 
     expect(DELTA_MAPPER_PROMPT).toContain("tier 4 in a costume");
     expect(CASTELLAN_IDENTITY).toContain("never grades its own homework");
     expect(GATE_LADDER_DOC).toContain("tier 4 (human)");
+    // dogfood 2026-06-11: "build it" made spec-talk roleplay a completed build
+    // ("Demo ready") and try to resolve requirements to match its own fiction.
+    expect(DELTA_MAPPER_PROMPT.replace(/\s+/g, " ")).toContain("NEVER claim work was performed");
+    expect(CASTELLAN_IDENTITY).toContain("claiming work that was not performed is the exact failure Castellan exists to kill");
+    const { SPEC_ITEM_SHAPES } = await import("../../src/contract/self-knowledge.js");
+    expect(SPEC_ITEM_SHAPES).toContain("resolve ONLY on");
     // pattern doc is GENERATED from the library — every pattern id present, forever
     const doc = gatePatternDoc();
     for (const p of GATE_PATTERNS) expect(doc).toContain(p.id);
