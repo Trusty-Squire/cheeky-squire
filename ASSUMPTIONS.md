@@ -131,6 +131,18 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   origin: "build it, report when done" — the sentence should work, mechanically.
 
 ## CLI
+- A30. ser runs anywhere with no config: chains resolve via one
+  resolveChains() — explicit --chains, cwd, workdir, global
+  ~/.config/castellan/chains.yaml, then BUILT-IN defaults (src/contract/
+  default-chains.ts, same pinned slugs/prices as the repo chains.yaml).
+  Only a missing explicit --chains path errors. `ser talk` prints a banner
+  when defaults are in play.
+- A31. A talk-run ALWAYS sandboxes (forces --sandbox): the spec dir is a
+  thinking space, often nested in a larger repo, and the harness does
+  `git reset --hard` on failed nodes — it must never mutate the user's
+  working tree. The mission executes in an isolated temp copy; the printed
+  workdir is where artifacts land. (Direct `ser run` is unchanged: in-place
+  for a clean repo, sandbox only when not a repo or --sandbox given.)
 - A29. The API key lives in ONE place: `~/.config/castellan/.env`
   (override via $CASTELLAN_HOME or $XDG_CONFIG_HOME). `ser login` writes it
   there (mode 600), preferring a key already in the environment so a scattered
