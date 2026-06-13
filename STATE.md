@@ -22,7 +22,10 @@ Per SPEC-v0.2:
 - Benches built (not run live): derive-bench (planner tax), poker-bench
   (5 infeasible + 2 controls), gate-attack (hermetic; 0 fails on tasks 1-5,
   1 legit warn on the refactor task).
-- 138 hermetic tests; zero network; CI green.
+- Unified interface: `ser talk` — one conversation across all tools; the
+  mapper requests harness commands via an `action` field (check/verify/
+  derive/run/status), the harness executes mechanically and reports (A28).
+- 149 hermetic tests; zero network; CI green.
 
 ## Live runs pending (human/key)
 1. Cross-executor gauntlet — RUNNING in background (glm/kimi/deepseek × 20

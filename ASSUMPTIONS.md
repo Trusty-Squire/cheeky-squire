@@ -120,6 +120,16 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   (sufficient for the poker class; insufficient for fast-moving facts — known
   limitation).
 
+- A28. The unified interface (`ser talk`) routes through the EXISTING
+  delta-mapper call — one new `action` field (check|verify|derive|run|status),
+  not a second router model. The mapper may only REQUEST a command; the
+  harness executes it mechanically and prints its own report (gate verdicts,
+  costs, commits) — the model never performs work and never reports results.
+  `run` re-derives when the spec is newer than the compiled mission (mtime)
+  and requires one y/N spend confirmation; unconfirmed or non-TTY = cancelled.
+  The mission compiles to `<name>.mission.yaml` next to the spec. Dogfood
+  origin: "build it, report when done" — the sentence should work, mechanically.
+
 ## CLI
 - A17. Commands: `run <mission> [--mock] [--chain <name>]`,
   `derive "<goal>" [--yes] [--chain <name>]`, `trace <file>`,

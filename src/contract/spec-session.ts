@@ -32,6 +32,10 @@ export const DeltaSchema = z
 
 export type Delta = z.infer<typeof DeltaSchema>;
 
+/** Harness commands the mapper may REQUEST (never perform): the unified
+ * interface routes these mechanically — gates judge, the model never reports. */
+export const TALK_ACTIONS = ["none", "check", "verify", "derive", "run", "status"] as const;
+
 export const DeltaBatchSchema = z.object({
   deltas: z.array(DeltaSchema),
   /** At most one terse question — the highest-information open one. */
@@ -40,6 +44,10 @@ export const DeltaBatchSchema = z.object({
   reply: z.string().default(""),
   /** Deprecated alias kept for compat. */
   note: z.string().default(""),
+  /** Requested harness command; the harness executes and reports, not the model. */
+  action: z.enum(TALK_ACTIONS).default("none"),
+  /** Action argument (e.g. claim id for verify). */
+  action_arg: z.string().default(""),
 });
 
 export type DeltaBatch = z.infer<typeof DeltaBatchSchema>;
@@ -51,13 +59,20 @@ Your role: a thought partner who is brutally economical with words, plus a
 silent bookkeeper. The spec below is the ONLY state; this conversation is
 disposable.
 
-You have NO tools, NO filesystem, NO ability to build, run, edit, or test
-anything. Building happens AFTER this conversation: ser spec check gates the
-spec, ser derive compiles it into a gated mission, ser run executes it with
-verified commits. If the user asks you to build or do work, say exactly that
-and point to the handoff (ser spec check <file>, then ser derive). NEVER
-claim work was performed. Never resolve or remove a requirement because it
-is "built" — only its gate, at run time, can prove that.
+You have NO tools and cannot build, run, edit, or test anything yourself —
+but you can ask the HARNESS to act by setting "action" in your output:
+  check  — mechanical spec gates: is it ready to compile?
+  verify — adversarial lenses on one ledger claim (action_arg: the claim id)
+  derive — compile the spec into a gated mission plan
+  run    — execute the mission, gate-verified commits (the harness derives
+           first when the plan is stale and asks the user to confirm spend)
+  status — spec summary + gates
+Set an action ONLY when the user asks for that work ("build it" -> run;
+"is this ready?" -> check; "fact-check C2" -> verify). The harness executes
+and prints the results — gate verdicts, commits, costs. You NEVER claim work
+was performed and never report results yourself; keep the reply to intent
+("running it — gates will report"). Never resolve or remove a requirement
+because it is "built" — only its gate, at run time, can prove that.
 
 For each user message output JSON:
 {"reply": "...", "deltas": [...], "question": ""}
@@ -143,11 +158,16 @@ export function salvageBatch(raw: unknown): DeltaBatch {
       if (ok.success) deltas.push(ok.data);
     }
   }
+  const action = (TALK_ACTIONS as readonly string[]).includes(o.action as string)
+    ? (o.action as DeltaBatch["action"])
+    : "none";
   return {
     deltas,
     question: typeof o.question === "string" ? o.question : "",
     reply: typeof o.reply === "string" ? o.reply : "",
     note: "",
+    action,
+    action_arg: typeof o.action_arg === "string" ? o.action_arg : "",
   };
 }
 
@@ -239,7 +259,7 @@ export class SpecSession {
       } else {
         if (attempt === 1) {
           // Bookkeeping failed twice; keep the conversation alive with raw text.
-          return { deltas: [], question: "", note: "", reply: res.text.slice(0, 400) };
+          return { deltas: [], question: "", note: "", reply: res.text.slice(0, 400), action: "none" as const, action_arg: "" };
         }
         note = `\n\nYour previous output was not valid JSON: ${parsed.error}`;
       }

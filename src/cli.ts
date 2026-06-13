@@ -30,6 +30,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdFix(rest);
     case "spec":
       return cmdSpec(rest);
+    case "talk":
+      return cmdTalk(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -48,6 +50,7 @@ function printUsage(): void {
       "ser — Castellan: verified coding agent. Specs compile to gated loops.",
       "",
       "Usage:",
+      "  ser talk [x.spec.yaml]    — the unified interface: talk; check/derive/run happen behind it",
       "  ser run <mission.yaml> [--mock] [--chain <name>] [--sandbox]",
       "  ser derive \"<goal>\" [--chain <name>] [--yes] [--out <file>]",
       "  ser trace <trace.jsonl>",
@@ -238,7 +241,7 @@ async function cmdFix(args: string[]): Promise<number> {
 async function cmdSpec(args: string[]): Promise<number> {
   const sub = args[0];
   const { parseSpec } = await import("./contract/spec.js");
-  const { checkSpec, verifyClaim, SpecSession } = await import("./contract/spec-session.js");
+  const { checkSpec, verifyClaim } = await import("./contract/spec-session.js");
   const { stringify } = await import("yaml");
   const { writeFileSync: wf } = await import("node:fs");
 
@@ -289,64 +292,105 @@ async function cmdSpec(args: string[]): Promise<number> {
     return r.verdict === "verified" ? 0 : 1;
   }
 
-  if (sub === "talk") {
-    const flags = parseFlags(args.slice(1), ["chain", "chains"]);
-    const file = flags.positional[0];
-    if (!file) throw new SquireError("USAGE", "ser spec talk <x.spec.yaml>");
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser spec talk");
-    const { OpenRouterClient } = await import("./llm/openrouter.js");
-    const { loadChainsForDerive } = await import("./contract/derive.js");
-    const chains = loadChainsForDerive(process.cwd(), flags.value.get("chains"));
-    const chain = resolveChain(chains, flags.value.get("chain") ?? "cheap");
-    const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
-    const session = new SpecSession({
-      path: resolve(file),
-      llm,
-      executorModel: chain.executor,
-      knightModel: chain.knight,
-    });
-    process.stdout.write("ser spec — talk normally; the notebook updates itself. 'undo' reverts, empty line exits.\n");
-    let undoStack: string[] = [];
-    for (;;) {
-      const msg = (await ask("you> ")).trim();
-      if (!msg) return 0;
-      if (msg === "undo") {
-        const prev = undoStack.pop();
-        if (!prev) { process.stdout.write("  nothing to undo\n"); continue; }
-        const { writeFileSync: w } = await import("node:fs");
-        w(session.path, prev);
-        session.reject(); // repeated undos escalate the model
-        process.stdout.write(`  reverted (next turn on ${session.currentModel()})\n`);
-        continue;
-      }
-      const before = readFileSync(session.path, "utf8");
-      try {
-        const batch = await session.turn(msg);
-        if (batch.reply) process.stdout.write(`\n${batch.reply}\n`);
-        if (batch.deltas.length > 0) {
-          const { applied, dropped } = await session.acceptLenient(batch);
-          if (applied.length > 0) {
-            undoStack.push(before);
-            if (undoStack.length > 20) undoStack = undoStack.slice(-20);
-            const summary = applied
-              .map((d) => `${d.op === "add" ? "+" : d.op === "remove" ? "-" : "~"}${d.section}${d.id ? ":" + d.id : ""}${d.drift ? "⚠drift" : ""}`)
-              .join(" ");
-            process.stdout.write(`  [spec ${summary}]\n`);
-          }
-          for (const drop of dropped) {
-            process.stdout.write(`  [edit dropped (${drop.delta.section}${drop.delta.id ? ":" + drop.delta.id : ""}): ${drop.reason}]\n`);
-          }
-        }
-        if (batch.question) process.stdout.write(`? ${batch.question}\n`);
-      } catch (err) {
-        // The conversation never dies for bookkeeping reasons.
-        process.stdout.write(`  [turn failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);
-      }
-    }
-  }
+  if (sub === "talk") return cmdTalk(args.slice(1));
 
   throw new SquireError("USAGE", "ser spec init|check|verify|talk <x.spec.yaml>");
+}
+
+/**
+ * The unified interface (`ser talk`): one conversation across all tools.
+ * The mapper records deltas and may REQUEST a harness command (check/verify/
+ * derive/run/status); the harness executes it mechanically and prints its own
+ * report. The differences between the tools happen in the background.
+ */
+async function cmdTalk(args: string[]): Promise<number> {
+  const flags = parseFlags(args, ["chain", "chains", "budget"]);
+  const { SpecSession } = await import("./contract/spec-session.js");
+  const { dispatchAction } = await import("./contract/talk.js");
+
+  let file = flags.positional[0];
+  if (!file) {
+    const { readdirSync } = await import("node:fs");
+    const specs = readdirSync(process.cwd()).filter((f) => f.endsWith(".spec.yaml"));
+    if (specs.length === 1) file = specs[0]!;
+    else if (specs.length === 0) {
+      throw new SquireError("USAGE", 'no .spec.yaml here — start one: ser spec init <name.spec.yaml> --thesis "..."');
+    } else {
+      throw new SquireError("USAGE", `multiple specs here (${specs.join(", ")}) — ser talk <file>`);
+    }
+  }
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser talk");
+  const { OpenRouterClient } = await import("./llm/openrouter.js");
+  const { loadChainsForDerive } = await import("./contract/derive.js");
+  const chains = loadChainsForDerive(process.cwd(), flags.value.get("chains"));
+  const chainName = flags.value.get("chain") ?? "cheap";
+  const chain = resolveChain(chains, chainName);
+  const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
+  const session = new SpecSession({
+    path: resolve(file),
+    llm,
+    executorModel: chain.executor,
+    knightModel: chain.knight,
+  });
+  const actionCtx = {
+    specPath: session.path,
+    llm,
+    executorModel: chain.executor,
+    chainName,
+    budgetUsd: flags.value.get("budget") ? Number(flags.value.get("budget")) : undefined,
+    confirm: async (q: string) => /^y(es)?\b/i.test((await ask(`${q} [y/N]: `)).trim()),
+    execute: async (missionPath: string) => {
+      const mission = parseMission(readFileSync(missionPath, "utf8"), missionPath);
+      return executeMissionObject(mission, dirname(missionPath), flags, basename(missionPath).replace(/\.[^.]+$/, ""));
+    },
+  };
+  process.stdout.write("ser — talk normally; the notebook updates itself. 'undo' reverts, empty line exits.\n");
+  let undoStack: string[] = [];
+  for (;;) {
+    const msg = (await ask("you> ")).trim();
+    if (!msg) return 0;
+    if (msg === "undo") {
+      const prev = undoStack.pop();
+      if (!prev) { process.stdout.write("  nothing to undo\n"); continue; }
+      const { writeFileSync: w } = await import("node:fs");
+      w(session.path, prev);
+      session.reject(); // repeated undos escalate the model
+      process.stdout.write(`  reverted (next turn on ${session.currentModel()})\n`);
+      continue;
+    }
+    const before = readFileSync(session.path, "utf8");
+    try {
+      const batch = await session.turn(msg);
+      if (batch.reply) process.stdout.write(`\n${batch.reply}\n`);
+      if (batch.deltas.length > 0) {
+        const { applied, dropped } = await session.acceptLenient(batch);
+        if (applied.length > 0) {
+          undoStack.push(before);
+          if (undoStack.length > 20) undoStack = undoStack.slice(-20);
+          const summary = applied
+            .map((d) => `${d.op === "add" ? "+" : d.op === "remove" ? "-" : "~"}${d.section}${d.id ? ":" + d.id : ""}${d.drift ? "⚠drift" : ""}`)
+            .join(" ");
+          process.stdout.write(`  [spec ${summary}]\n`);
+        }
+        for (const drop of dropped) {
+          process.stdout.write(`  [edit dropped (${drop.delta.section}${drop.delta.id ? ":" + drop.delta.id : ""}): ${drop.reason}]\n`);
+        }
+      }
+      if (batch.action !== "none") {
+        try {
+          const lines = await dispatchAction(batch.action, batch.action_arg, actionCtx);
+          for (const line of lines) process.stdout.write(`${line}\n`);
+        } catch (err) {
+          process.stdout.write(`  [${batch.action} failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);
+        }
+      }
+      if (batch.question) process.stdout.write(`? ${batch.question}\n`);
+    } catch (err) {
+      // The conversation never dies for bookkeeping reasons.
+      process.stdout.write(`  [turn failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);
+    }
+  }
 }
 
 async function cmdTrace(args: string[]): Promise<number> {

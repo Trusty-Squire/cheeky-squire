@@ -1,0 +1,121 @@
+import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { dirname } from "node:path";
+import { stringify as yamlStringify } from "yaml";
+import type { LlmClient } from "../llm/types.js";
+import { parseMission } from "./schema.js";
+import { parseSpec, unverifiedLoadBearing } from "./spec.js";
+import { checkSpec, verifyClaim, type DeltaBatch } from "./spec-session.js";
+import { deriveV2 } from "./derive2.js";
+
+/**
+ * The unified interface (`ser talk`): one conversation across all tools.
+ * The delta mapper REQUESTS a harness command via batch.action; this module
+ * executes it mechanically and returns the harness's own report lines. The
+ * model never performs work and never reports results — gates do.
+ */
+
+export type TalkAction = DeltaBatch["action"];
+
+export interface TalkActionContext {
+  specPath: string;
+  llm: LlmClient;
+  /** Cheap executor model — derive/verify stages run on it. */
+  executorModel: string;
+  chainName: string;
+  budgetUsd?: number;
+  /** Runs a compiled mission with the full harness; injected by the CLI. */
+  execute?: (missionPath: string) => Promise<number>;
+  /** One-keystroke spend confirmation; absent or false = run cancelled. */
+  confirm?: (question: string) => Promise<boolean>;
+}
+
+export function missionPathFor(specPath: string): string {
+  return specPath.replace(/\.spec\.yaml$/, "") + ".mission.yaml";
+}
+
+/** Compile the spec; returns the mission path on success, null on refusal. */
+async function deriveSpec(ctx: TalkActionContext, lines: string[]): Promise<string | null> {
+  const spec = parseSpec(readFileSync(ctx.specPath, "utf8"), ctx.specPath);
+  const result = await deriveV2({
+    spec,
+    workdir: dirname(ctx.specPath),
+    llm: ctx.llm,
+    model: ctx.executorModel,
+    chainName: ctx.chainName,
+    budgetUsd: ctx.budgetUsd ?? 2.5,
+  });
+  if (!result.ok) {
+    for (const r of result.reasons) lines.push(`refused: ${r}`);
+    for (const rem of result.remediations) {
+      lines.push(`  ${rem.requirement}: ${rem.options.map((o) => o.split(":")[0]).join(" | ")}`);
+    }
+    return null;
+  }
+  const mp = missionPathFor(ctx.specPath);
+  writeFileSync(mp, yamlStringify(result.mission));
+  lines.push(result.readback, `mission written: ${mp}`);
+  return mp;
+}
+
+export async function dispatchAction(
+  action: TalkAction,
+  arg: string,
+  ctx: TalkActionContext,
+): Promise<string[]> {
+  const lines: string[] = [];
+  switch (action) {
+    case "none":
+      return lines;
+
+    case "status":
+    case "check": {
+      const spec = parseSpec(readFileSync(ctx.specPath, "utf8"), ctx.specPath);
+      if (action === "status") {
+        lines.push(
+          `spec: ${spec.requirements.length} requirement(s), ${spec.decisions.length} decision(s), ` +
+            `${spec.claims.length} claim(s), ${spec.open_questions.length} open question(s)`,
+        );
+      }
+      lines.push(...checkSpec(spec).lines);
+      return lines;
+    }
+
+    case "verify": {
+      const spec = parseSpec(readFileSync(ctx.specPath, "utf8"), ctx.specPath);
+      const claimId = arg || unverifiedLoadBearing(spec)[0]?.claim;
+      if (!claimId) return ["nothing to verify — no unverified load-bearing claims"];
+      const r = await verifyClaim(spec, claimId, ctx.llm, ctx.executorModel);
+      writeFileSync(ctx.specPath, yamlStringify(r.spec));
+      return [`${claimId}: ${r.verdict}`, `  ${r.evidence}`];
+    }
+
+    case "derive": {
+      await deriveSpec(ctx, lines);
+      return lines;
+    }
+
+    case "run": {
+      if (!ctx.execute) return ["run is not available in this session"];
+      let mp = missionPathFor(ctx.specPath);
+      const stale = !existsSync(mp) || statSync(mp).mtimeMs < statSync(ctx.specPath).mtimeMs;
+      if (stale) {
+        const derived = await deriveSpec(ctx, lines);
+        if (!derived) return lines; // refusal — spec not ready, nothing runs
+        mp = derived;
+      }
+      const mission = parseMission(readFileSync(mp, "utf8"), mp);
+      const confirmed = ctx.confirm
+        ? await ctx.confirm(
+            `run "${mission.goal}" — ${mission.nodes.length} node(s), budget $${mission.budget_usd}, chain ${mission.chain}?`,
+          )
+        : false;
+      if (!confirmed) {
+        lines.push("run cancelled (not confirmed)");
+        return lines;
+      }
+      const code = await ctx.execute(mp);
+      lines.push(code === 0 ? "mission complete — every gate green" : "mission halted — see trace above");
+      return lines;
+    }
+  }
+}

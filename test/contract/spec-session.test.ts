@@ -50,6 +50,8 @@ const batchAddDecision: DeltaBatch = {
   question: "should the hosted tier ship in v0.3?",
   reply: "logged. receipts-first it is.",
   note: "mapped your pricing comment to D1 + resolved Q1",
+  action: "none",
+  action_arg: "",
 };
 
 describe("applyDeltas (pure, validated)", () => {
@@ -176,6 +178,11 @@ describe("self-knowledge composition (no architectural drift between prompts)", 
     // dogfood 2026-06-11: "build it" made spec-talk roleplay a completed build
     // ("Demo ready") and try to resolve requirements to match its own fiction.
     expect(DELTA_MAPPER_PROMPT.replace(/\s+/g, " ")).toContain("NEVER claim work was performed");
+    // unified interface: the mapper requests harness commands, never performs them
+    expect(DELTA_MAPPER_PROMPT).toContain('setting "action"');
+    for (const a of ["check", "verify", "derive", "run", "status"]) {
+      expect(DELTA_MAPPER_PROMPT).toContain(`${a} `);
+    }
     expect(CASTELLAN_IDENTITY).toContain("claiming work that was not performed is the exact failure Castellan exists to kill");
     const { SPEC_ITEM_SHAPES } = await import("../../src/contract/self-knowledge.js");
     expect(SPEC_ITEM_SHAPES).toContain("resolve ONLY on");
