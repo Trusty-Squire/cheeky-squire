@@ -152,16 +152,21 @@ function shortRec(rec: string): string {
   return t.length > 70 ? t.slice(0, 67).replace(/\s+\S*$/, "") + "…" : t;
 }
 
-/** The conversational reply for the seed turn — a plain-words summary + the first fork. */
+/** The conversational reply for the seed turn — pieces, what's locked in, the first fork. */
 export function renderSeed(idea: IdeaResult): string {
   const names = idea.components.map((c) => c.statement.replace(/\s+(that|which|for|to)\s+.*/i, "").trim()).slice(0, 6);
   const asks = idea.decisions.filter((d) => d.bucket === 1);
+  const defaults = idea.decisions.filter((d) => d.bucket === 2);
   let r = `I'd build this as ${idea.components.length} piece${idea.components.length === 1 ? "" : "s"}: ${names.join(", ")}.`;
+  if (defaults.length > 0) {
+    // surface what ser decided on its own, so a bad default is catchable
+    r += `\n\nLocked in (say if any's wrong): ${defaults.slice(0, 4).map((d) => shortRec(d.recommendation)).join("; ")}.`;
+  }
   if (asks.length > 0) {
-    const more = asks.length > 1 ? ` (${asks.length} in all)` : "";
-    r += `\n\nA few calls only you can make${more}. First — ${asks[0]!.question}` + (asks[0]!.recommendation ? ` I'd go with ${shortRec(asks[0]!.recommendation)}.` : "");
+    const more = asks.length > 1 ? ` (${asks.length} for you)` : "";
+    r += `\n\nFirst call${more} — ${asks[0]!.question}` + (asks[0]!.recommendation ? ` I'd go with ${shortRec(asks[0]!.recommendation)}.` : "");
   } else {
-    r += `\n\nNothing needs you — say "build it" when you're ready.`;
+    r += `\n\nNothing else needs you — say "build it" when you're ready.`;
   }
   return r;
 }

@@ -130,19 +130,19 @@ describe("ideaToTalkSpec + renderSeed (conversational seed)", () => {
     expect(spec.open_questions.some((q) => q.blocking)).toBe(true);
   });
 
-  it("renderSeed summarizes the pieces and asks the first fork with a suggestion", () => {
-    
+  it("renderSeed shows pieces, what's LOCKED IN, and asks the first fork", () => {
     const r = renderSeed(idea);
     expect(r).toContain("2 pieces");
-    expect(r).toContain("2 in all"); // 2 asks
+    expect(r).toContain("Locked in"); // the bucket-2 default is surfaced
+    expect(r).toContain("SQLite");
+    expect(r).toContain("2 for you"); // 2 asks
     expect(r).toContain("target hardware?");
     expect(r).toContain("Raspberry Pi 4");
   });
 
   it("renderSeed with no asks invites a build", () => {
-    
     const r = renderSeed({ ...idea, decisions: [] });
-    expect(r).toContain("Nothing needs you");
+    expect(r).toContain("Nothing else needs you");
     expect(r).toContain("build it");
   });
 });

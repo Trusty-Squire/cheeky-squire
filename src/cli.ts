@@ -402,23 +402,26 @@ async function cmdTalk(args: string[]): Promise<number> {
       continue;
     }
     const before = readFileSync(session.path, "utf8");
+    // CONVERGENCE: decompose a product through the calibrated idea phase, not
+    // the legacy mapper. Shared by a fresh start and a pivot to a new product.
+    const seed = async (pivotNote: boolean): Promise<void> => {
+      process.stdout.write(st.dim("  …working it out") + "\n");
+      const idea = await extractIdea(msg, llm, chain.executor);
+      undoStack.push(before);
+      w(session.path, (await import("yaml")).stringify(ideaToTalkSpec(msg, idea)));
+      process.stdout.write("\n" + renderSeed(idea) + "\n");
+      note((pivotNote ? "new direction — old spec reset ('undo' restores it); " : "") +
+        `${idea.components.length} requirements, ${idea.decisions.filter((d) => d.bucket === 1).length} to decide`);
+      lastReady = (await scoreSpec(session.load())).ready;
+    };
     try {
-      // CONVERGENCE: a fresh spec's first substantive message goes through the
-      // calibrated idea phase (decompose + bucket), not the legacy mapper.
-      if (fresh(session.load()) && !isCommand(msg)) {
-        process.stdout.write(st.dim("  …working it out") + "\n");
-        const idea = await extractIdea(msg, llm, chain.executor);
-        undoStack.push(before);
-        w(session.path, (await import("yaml")).stringify(ideaToTalkSpec(msg, idea)));
-        process.stdout.write("\n" + renderSeed(idea) + "\n");
-        note(`${idea.components.length} requirements, ${idea.decisions.filter((d) => d.bucket === 1).length} to decide`);
-        lastReady = (await scoreSpec(session.load())).ready;
-        continue;
-      }
+      if (fresh(session.load()) && !isCommand(msg)) { await seed(false); continue; }
 
       const batch = await session.turn(msg);
+      // A pivot is a new product — re-decompose it via the idea phase (same
+      // calibrated path), rather than the mapper's incremental decomposition.
+      if (batch.pivot) { await seed(true); continue; }
       if (batch.reply) process.stdout.write("\n" + batch.reply + "\n");
-      if (batch.pivot) note("pivot — new product; old spec reset ('undo' restores it)");
       if (batch.deltas.length > 0) {
         const { applied, dropped } = await session.acceptLenient(batch);
         if (applied.length > 0) {
