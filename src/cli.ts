@@ -11,6 +11,7 @@ import { initRepo, isClean } from "./harness/checkpoint.js";
 import { SquireError } from "./errors.js";
 import type { Engine } from "./engine/types.js";
 import { validateMissionFile } from "./contract/validate.js";
+import { sanitizeInput } from "./term.js";
 
 async function main(argv: string[]): Promise<number> {
   const { loadDotEnv } = await import("./env.js");
@@ -326,7 +327,13 @@ async function cmdTalk(args: string[]): Promise<number> {
     confirm: async (q: string) => /^y(es)?\b/i.test((await ask(`${q} [y/N]: `)).trim()),
     execute: async (missionPath: string) => {
       const mission = parseMission(readFileSync(missionPath, "utf8"), missionPath);
-      return executeMissionObject(mission, dirname(missionPath), flags, basename(missionPath).replace(/\.[^.]+$/, ""));
+      // ALWAYS sandbox a talk-run: the spec dir is a thinking space, often
+      // inside a larger repo. The harness does git reset --hard on failed
+      // nodes — it must never touch the user's working tree. The run executes
+      // in an isolated temp copy; the printed workdir is where artifacts land.
+      const runFlags: Flags = { positional: [], bool: new Set(flags.bool), value: new Map(flags.value) };
+      runFlags.bool.add("sandbox");
+      return executeMissionObject(mission, dirname(missionPath), runFlags, basename(missionPath).replace(/\.[^.]+$/, ""));
     },
   };
   process.stdout.write("ser — talk normally; the notebook updates itself. 'undo' reverts, empty line exits.\n");
@@ -472,9 +479,8 @@ function promptAdjudicator(workdir: string): import("./harness/gates.js").Adjudi
   };
 }
 
-function ask(prompt: string): Promise<string> {
+function readChunk(): Promise<string> {
   return new Promise((resolveP) => {
-    process.stdout.write(prompt);
     process.stdin.resume();
     process.stdin.setEncoding("utf8");
     process.stdin.once("data", (d) => {
@@ -482,6 +488,16 @@ function ask(prompt: string): Promise<string> {
       resolveP(String(d));
     });
   });
+}
+
+/** Prompt and read one line, skipping pure mouse/escape noise (phone terminals). */
+async function ask(prompt: string): Promise<string> {
+  process.stdout.write(prompt);
+  for (;;) {
+    const { text, noise } = sanitizeInput(await readChunk());
+    if (!noise) return text; // a real empty line (just Enter) still returns "" and exits the loop
+    // pure escape/mouse garbage — keep waiting without echoing or exiting
+  }
 }
 
 main(process.argv.slice(2))
