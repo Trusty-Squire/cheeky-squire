@@ -8,6 +8,7 @@ import { parseSpec, unverifiedLoadBearing } from "./spec.js";
 import { checkSpec, verifyClaim, type DeltaBatch } from "./spec-session.js";
 import { deriveV2 } from "./derive2.js";
 import { scoreSpec, renderScoreLine, READY_THRESHOLD } from "./spec-score.js";
+import { autofillSpec } from "./autofill.js";
 
 /**
  * The unified interface (`ser talk`): one conversation across all tools.
@@ -146,19 +147,42 @@ export async function dispatchAction(
     case "run": {
       if (!ctx.execute) return ["run is not available in this session"];
       // Readiness is a gate: a thin spec compiles into a coarse, stub-passable
-      // plan. Refuse below threshold and surface the gaps to close first —
-      // this is the loop driving the score up before any money is spent.
-      const spec = parseSpec(readFileSync(ctx.specPath, "utf8"), ctx.specPath);
-      const s = await scoreSpec(spec, { llm: ctx.llm, model: ctx.executorModel });
-      if (!s.ready) {
+      // plan. Below threshold we either surface the gaps (default) or — when
+      // the user says "build it anyway" (arg "auto"/"force") — autonomously
+      // fill what we can before spending anything.
+      const force = arg === "auto" || arg === "force";
+      let s = await scoreSpec(parseSpec(readFileSync(ctx.specPath, "utf8"), ctx.specPath), {
+        llm: ctx.llm,
+        model: ctx.executorModel,
+      });
+      if (!s.ready && !force) {
         lines.push(
-          `not building yet — spec score ${s.score}/100 (need ${READY_THRESHOLD}). Close these first:`,
+          `not building yet — spec score ${s.score}/100 (need ${READY_THRESHOLD}). Close these first, ` +
+            `or say "build it anyway" and I'll fill them myself:`,
         );
         for (const imp of s.improvements.slice(0, 4)) {
           const lead = imp.needsUser ? "decide" : "ser can do";
           lines.push(`  [${imp.severity}/${imp.dimension}, ${lead}] ${imp.problem}\n    → ${imp.suggestion}`);
         }
         return lines;
+      }
+      if (!s.ready && force) {
+        lines.push(`spec at ${s.score}/100 — filling the gaps myself...`);
+        const r = await autofillSpec(ctx.specPath, ctx.llm, ctx.executorModel);
+        lines.push(`autofilled ${r.applied.length} edit(s) over ${r.rounds} round(s) → ${r.finalScore.score}/100`);
+        for (const def of r.defaults) lines.push(`  ${def} (undo to change)`);
+        s = r.finalScore;
+        if (!s.ready) {
+          lines.push(`still ${s.score}/100 — these are genuine decisions only you can make:`);
+          for (const imp of s.improvements.filter((i) => i.needsUser).slice(0, 3)) {
+            lines.push(`  [decide] ${imp.problem}\n    → ${imp.suggestion}`);
+          }
+          if (!s.improvements.some((i) => i.needsUser)) {
+            for (const imp of s.improvements.slice(0, 3)) lines.push(`  [${imp.severity}] ${imp.problem}`);
+          }
+          return lines;
+        }
+        lines.push(`now ${s.score}/100 — building.`);
       }
       let mp = missionPathFor(ctx.specPath);
       const stale = !existsSync(mp) || statSync(mp).mtimeMs < statSync(ctx.specPath).mtimeMs;

@@ -66,9 +66,13 @@ but you can ask the HARNESS to act by setting "action" in your output:
   derive — compile the spec into a gated mission plan
   run    — execute the mission, gate-verified commits (the harness derives
            first when the plan is stale and asks the user to confirm spend;
-           it REFUSES if the spec readiness score is too low)
+           below the readiness score it surfaces the gaps instead of building)
   status — spec summary + gates
   score  — readiness score + the next gap to close (auto-shown each turn)
+When the user insists on building despite a low score ("build it anyway",
+"just do it", "you fill it in", "figure it out yourself"), set action=run with
+action_arg="auto" — the harness then autonomously fills the gaps it can and
+defaults the rest before building, instead of refusing.
 Set an action ONLY when the user asks for that work ("build it" -> run;
 "is this ready?" -> check; "fact-check C2" -> verify). The harness executes
 and prints the results — gate verdicts, commits, costs. You NEVER claim work

@@ -131,6 +131,17 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   origin: "build it, report when done" — the sentence should work, mechanically.
 
 ## CLI
+- A33. Autonomous spec authoring (src/contract/autofill.ts): when the user
+  insists on building below the readiness score ("build it anyway" → mapper
+  emits action=run, action_arg="auto"), ser stops asking and closes the gaps
+  itself — each round it diagnoses, generates deltas that fill what it can,
+  applies (via normalizeDeltas + applyDeltasLenient), and re-scores, until
+  build-ready or no progress (maxRounds 6; stop after 2 gainless rounds or a
+  round that produces/lands nothing). Genuine forks (needsUser) are filled
+  with a sensible DEFAULT recorded as a "ser default:" decision the user sees
+  and can undo; the spend confirmation is the human checkpoint. If autofill
+  cannot reach ready, the remaining needsUser decisions are surfaced and the
+  build stops. Without "auto", run still surfaces the gaps (A32).
 - A32. Spec readiness is a SCORE the loop drives, not a one-time gate
   (src/contract/spec-score.ts). Every talk turn self-diagnoses and prints
   `spec score N/100` + the single next gap. The NUMBER is mechanical (fixed
