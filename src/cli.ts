@@ -393,6 +393,7 @@ async function cmdTalk(args: string[]): Promise<number> {
     try {
       const batch = await session.turn(msg);
       if (batch.reply) process.stdout.write(`\n${batch.reply}\n`);
+      if (batch.pivot) process.stdout.write(st.yellow("  [pivot — new product; the old spec was reset. 'undo' to restore it]") + "\n");
       if (batch.deltas.length > 0) {
         const { applied, dropped } = await session.acceptLenient(batch);
         if (applied.length > 0) {

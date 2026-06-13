@@ -52,6 +52,7 @@ const batchAddDecision: DeltaBatch = {
   note: "mapped your pricing comment to D1 + resolved Q1",
   action: "none",
   action_arg: "",
+  pivot: false,
 };
 
 describe("applyDeltas (pure, validated)", () => {
@@ -186,6 +187,52 @@ describe("bookkeeping never kills the conversation", () => {
     expect(r.dropped).toHaveLength(1);
     expect(r.spec.claims[0]!.id).toBe("C1");
     expect(r.dropped[0]!.reason).toContain("C99");
+  });
+});
+
+describe("pivot reset (a new product clears the old spec — dogfood 2026-06-13)", () => {
+  const companion = `
+thesis: "an ambient ai companion for my daughter"
+requirements:
+  - id: R1
+    statement: "voice input/output"
+    acceptance: { tier: 1, gate: "node --test voice" }
+  - id: R2
+    statement: "child-safe content filtering"
+    acceptance: { tier: 1, gate: "node --test safety" }
+`;
+
+  it("a drift-thesis pivot resets stale requirements instead of appending", async () => {
+    const { isPivot } = await import("../../src/contract/spec-session.js");
+    // the cheap model emits: pivot the thesis (drift) + add poker requirements
+    const llm = new MockLlm([{ text: JSON.stringify({
+      reply: "poker bot is a new product",
+      deltas: [
+        { section: "thesis", op: "modify", value: "a GTO poker bot for no-limit holdem", drift: true },
+        { section: "requirements", op: "add", value: { statement: "GTO strategy engine", acceptance: { tier: 1, gate: "node --test gto" } } },
+        { section: "requirements", op: "add", value: { statement: "real-time betting decisions", acceptance: { tier: 1, gate: "node --test bet" } } },
+      ],
+    }) }]);
+    const dir = mkdtempSync(join(tmpdir(), "pivot-"));
+    const p = join(dir, "x.spec.yaml");
+    writeFileSync(p, companion);
+    const s = new SpecSession({ path: p, llm, executorModel: "m", knightModel: "k", git: false });
+    const batch = await s.turn("id like to build a GTO poker bot for no limit holdem");
+    expect(batch.pivot).toBe(true);
+    expect(isPivot(batch.deltas)).toBe(true);
+    await s.acceptLenient(batch);
+    const next = s.load();
+    expect(next.thesis).toContain("poker bot");
+    // the companion requirements are GONE; only poker ones remain
+    const statements = next.requirements.map((r) => r.statement).join(" ");
+    expect(statements).not.toMatch(/voice|child-safe/i);
+    expect(statements).toMatch(/GTO|betting/i);
+  });
+
+  it("a NON-drift edit appends as usual (no reset)", async () => {
+    const { isPivot } = await import("../../src/contract/spec-session.js");
+    expect(isPivot([{ section: "requirements", op: "add", value: { id: "R3" }, drift: false }])).toBe(false);
+    expect(isPivot([{ section: "thesis", op: "modify", value: "x", drift: false }])).toBe(false);
   });
 });
 

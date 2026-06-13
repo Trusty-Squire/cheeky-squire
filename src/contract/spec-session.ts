@@ -48,9 +48,30 @@ export const DeltaBatchSchema = z.object({
   action: z.enum(TALK_ACTIONS).default("none"),
   /** Action argument (e.g. claim id for verify). */
   action_arg: z.string().default(""),
+  /** Set by the harness when this batch pivots to a NEW product (drift thesis) —
+   * the stale requirements/decisions are reset rather than appended to. */
+  pivot: z.boolean().default(false),
 });
 
 export type DeltaBatch = z.infer<typeof DeltaBatchSchema>;
+
+/** Detect a pivot to a different product: a thesis modify flagged as drift. */
+export function isPivot(deltas: Delta[]): boolean {
+  return deltas.some((d) => d.section === "thesis" && d.op === "modify" && d.drift === true);
+}
+
+/** A clean slate for a pivot — keeps nothing; the batch's thesis + adds repopulate it. */
+export function blankPivotSpec(): Spec {
+  return SpecSchema.parse({
+    thesis: "TODO: pivot in progress",
+    stories: [],
+    scope_fence: [],
+    requirements: [{ id: "R1", statement: "TODO", acceptance: { tier: 0 } }],
+    decisions: [],
+    claims: [],
+    open_questions: [],
+  });
+}
 
 /** Appendix A (SPEC-v0.2) — delta-mapper instruction, draft. */
 export const DELTA_MAPPER_PROMPT = `${CASTELLAN_IDENTITY}
@@ -254,6 +275,7 @@ export function salvageBatch(raw: unknown): DeltaBatch {
     note: "",
     action,
     action_arg: typeof o.action_arg === "string" ? o.action_arg : "",
+    pivot: false, // set by finishTurn from the deltas
   };
 }
 
@@ -497,19 +519,13 @@ export class SpecSession {
             ? { ...(parsed.value as object), deltas: coerceRawDeltas((parsed.value as { deltas?: unknown }).deltas) }
             : parsed.value;
         const checked = DeltaBatchSchema.safeParse(coerced);
-        if (checked.success) {
-          const b = markDrift(checked.data);
-          return { ...b, deltas: normalizeDeltas(spec, b.deltas) };
-        }
-        if (attempt === 1) {
-          const b = salvageBatch(parsed.value); // degrade, never crash
-          return { ...b, deltas: normalizeDeltas(spec, b.deltas) };
-        }
+        if (checked.success) return this.finishTurn(markDrift(checked.data), spec);
+        if (attempt === 1) return this.finishTurn(salvageBatch(parsed.value), spec); // degrade, never crash
         note = `\n\nYour previous output failed validation:\n${formatZodIssues(checked.error.issues)}`;
       } else {
         if (attempt === 1) {
           // Bookkeeping failed twice; keep the conversation alive with raw text.
-          return { deltas: [], question: "", note: "", reply: res.text.slice(0, 400), action: "none" as const, action_arg: "" };
+          return { deltas: [], question: "", note: "", reply: res.text.slice(0, 400), action: "none" as const, action_arg: "", pivot: false };
         }
         note = `\n\nYour previous output was not valid JSON: ${parsed.error}`;
       }
@@ -517,9 +533,16 @@ export class SpecSession {
     throw new SquireError("SPEC_TURN_INVALID", "unreachable");
   }
 
+  /** Normalize deltas against the right base (blank on a pivot) and flag the pivot. */
+  private finishTurn(b: DeltaBatch, spec: Spec): DeltaBatch {
+    const pivot = isPivot(b.deltas);
+    const base = pivot ? blankPivotSpec() : spec;
+    return { ...b, deltas: normalizeDeltas(base, b.deltas), pivot };
+  }
+
   /** Accept a batch: apply, save, git-commit. Resets the rejection counter. */
   async accept(batch: DeltaBatch): Promise<Spec> {
-    const next = applyDeltas(this.load(), batch.deltas);
+    const next = applyDeltas(batch.pivot ? blankPivotSpec() : this.load(), batch.deltas);
     writeFileSync(this.path, yamlStringify(next));
     this.consecutiveRejections = 0;
     if (this.opts.git !== false) {
@@ -536,7 +559,7 @@ export class SpecSession {
 
   /** Lenient accept: apply what validates, report what dropped. Saves + commits when anything applied. */
   async acceptLenient(batch: DeltaBatch): Promise<{ applied: Delta[]; dropped: { delta: Delta; reason: string }[] }> {
-    const { spec, applied, dropped } = applyDeltasLenient(this.load(), batch.deltas);
+    const { spec, applied, dropped } = applyDeltasLenient(batch.pivot ? blankPivotSpec() : this.load(), batch.deltas);
     if (applied.length > 0) {
       writeFileSync(this.path, yamlStringify(spec));
       this.consecutiveRejections = 0;
