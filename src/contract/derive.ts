@@ -13,6 +13,8 @@ import {
   type ChainsFile,
 } from "./schema.js";
 import type { LlmClient } from "../llm/types.js";
+import { configDir } from "../env.js";
+import { DEFAULT_CHAINS_YAML, BUILTIN_CHAINS_SOURCE } from "./default-chains.js";
 
 /** Planner system prompt — Appendix A, verbatim. */
 export const HERALD_SYSTEM_PROMPT = `You are the Herald: a mission planner for a verification
@@ -288,15 +290,29 @@ export async function runDerive(args: string[]): Promise<number> {
   return 0;
 }
 
-export function loadChainsForDerive(workdir: string, explicit?: string): ChainsFile {
-  const candidates = [explicit, join(process.cwd(), "chains.yaml"), join(workdir, "chains.yaml")].filter(
-    (p): p is string => Boolean(p),
-  );
+/**
+ * Resolve the chains config. Order: explicit --chains, cwd/chains.yaml,
+ * workdir/chains.yaml, the global ~/.config/castellan/chains.yaml, then the
+ * built-in defaults. Never throws — ser runs anywhere; the path is "<built-in
+ * defaults>" when no file is found. An explicit --chains that does not exist
+ * IS an error (the user named a file they expected to use).
+ */
+export function resolveChains(workdir: string, explicit?: string): { chains: ChainsFile; path: string } {
+  if (explicit) {
+    const p = isAbsolute(explicit) ? explicit : resolve(explicit);
+    if (!existsSync(p)) throw new SquireError("CHAINS_NOT_FOUND", `--chains file not found: ${p}`);
+    return { chains: parseChains(readFileSync(p, "utf8"), p), path: p };
+  }
+  const candidates = [join(process.cwd(), "chains.yaml"), join(workdir, "chains.yaml"), join(configDir(), "chains.yaml")];
   for (const c of candidates) {
     const p = isAbsolute(c) ? c : resolve(c);
-    if (existsSync(p)) return parseChains(readFileSync(p, "utf8"), p);
+    if (existsSync(p)) return { chains: parseChains(readFileSync(p, "utf8"), p), path: p };
   }
-  throw new SquireError("CHAINS_NOT_FOUND", `chains.yaml not found (looked in ${candidates.join(", ")})`);
+  return { chains: parseChains(DEFAULT_CHAINS_YAML, BUILTIN_CHAINS_SOURCE), path: BUILTIN_CHAINS_SOURCE };
+}
+
+export function loadChainsForDerive(workdir: string, explicit?: string): ChainsFile {
+  return resolveChains(workdir, explicit).chains;
 }
 
 function parseDeriveArgs(args: string[]): {

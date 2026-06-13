@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { readFileSync, existsSync, cpSync, mkdtempSync } from "node:fs";
-import { dirname, resolve, join, basename, isAbsolute } from "node:path";
+import { dirname, resolve, join, basename } from "node:path";
 import { tmpdir } from "node:os";
-import { parseMission, parseChains, resolveChain, type ChainsFile } from "./contract/schema.js";
+import { parseMission, resolveChain, type ChainsFile } from "./contract/schema.js";
+import { resolveChains } from "./contract/derive.js";
 import { runMission } from "./harness/runner.js";
 import { summarizeTrace } from "./harness/trace.js";
 import { MockEngine, fileScriptResolver } from "./engine/mock.js";
@@ -96,16 +97,9 @@ function parseFlags(args: string[], valued: string[]): Flags {
 }
 
 function loadChains(missionDir: string, explicit?: string): { chains: ChainsFile; path: string } {
-  const candidates = [
-    explicit,
-    join(process.cwd(), "chains.yaml"),
-    join(missionDir, "chains.yaml"),
-  ].filter((p): p is string => Boolean(p));
-  for (const candidate of candidates) {
-    const p = isAbsolute(candidate) ? candidate : resolve(candidate);
-    if (existsSync(p)) return { chains: parseChains(readFileSync(p, "utf8"), p), path: p };
-  }
-  throw new SquireError("CHAINS_NOT_FOUND", `chains.yaml not found (looked in ${candidates.join(", ")})`);
+  // One resolver for every command: explicit, cwd, workdir, global config,
+  // then built-in defaults (ser runs anywhere — no chains.yaml required).
+  return resolveChains(missionDir, explicit);
 }
 
 async function cmdRun(args: string[]): Promise<number> {
@@ -309,10 +303,13 @@ async function cmdTalk(args: string[]): Promise<number> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser talk");
   const { OpenRouterClient } = await import("./llm/openrouter.js");
-  const { loadChainsForDerive } = await import("./contract/derive.js");
-  const chains = loadChainsForDerive(process.cwd(), flags.value.get("chains"));
+  const { chains, path: chainsPath } = resolveChains(process.cwd(), flags.value.get("chains"));
   const chainName = flags.value.get("chain") ?? "cheap";
   const chain = resolveChain(chains, chainName);
+  const { BUILTIN_CHAINS_SOURCE } = await import("./contract/default-chains.js");
+  if (chainsPath === BUILTIN_CHAINS_SOURCE) {
+    process.stdout.write(`chain: ${chainName} (built-in defaults — drop a chains.yaml here to customize)\n`);
+  }
   const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
   const session = new SpecSession({
     path: specFile,
