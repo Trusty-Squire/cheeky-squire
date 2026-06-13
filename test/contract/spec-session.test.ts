@@ -163,3 +163,18 @@ describe("bookkeeping never kills the conversation", () => {
     expect(r.dropped[0]!.reason).toContain("C99");
   });
 });
+
+describe("self-knowledge composition (no architectural drift between prompts)", () => {
+  it("spec-talk and derive prompts share the canonical gate ladder and identity", async () => {
+    const { DELTA_MAPPER_PROMPT } = await import("../../src/contract/spec-session.js");
+    const { CASTELLAN_IDENTITY, GATE_LADDER_DOC, gatePatternDoc } = await import("../../src/contract/self-knowledge.js");
+    const { GATE_PATTERNS } = await import("../../src/contract/gate-patterns.js");
+    expect(DELTA_MAPPER_PROMPT).toContain(CASTELLAN_IDENTITY);
+    expect(DELTA_MAPPER_PROMPT).toContain("tier 4 in a costume");
+    expect(CASTELLAN_IDENTITY).toContain("never grades its own homework");
+    expect(GATE_LADDER_DOC).toContain("tier 4 (human)");
+    // pattern doc is GENERATED from the library — every pattern id present, forever
+    const doc = gatePatternDoc();
+    for (const p of GATE_PATTERNS) expect(doc).toContain(p.id);
+  });
+});

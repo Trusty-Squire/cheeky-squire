@@ -8,6 +8,7 @@ import type { LlmClient } from "../llm/types.js";
 import { parseSpec, SpecSchema, unverifiedLoadBearing, type Spec } from "./spec.js";
 import { specPreGate } from "./derive2.js";
 import { tryParseJson, formatZodIssues } from "./derive.js";
+import { CASTELLAN_IDENTITY, GATE_LADDER_DOC, SPEC_ITEM_SHAPES } from "./self-knowledge.js";
 
 /**
  * ser spec — gated spec construction (SPEC-v0.2 §5). The spec file is the
@@ -44,7 +45,9 @@ export const DeltaBatchSchema = z.object({
 export type DeltaBatch = z.infer<typeof DeltaBatchSchema>;
 
 /** Appendix A (SPEC-v0.2) — delta-mapper instruction, draft. */
-export const DELTA_MAPPER_PROMPT = `You are a thought partner who is brutally economical with words, plus a
+export const DELTA_MAPPER_PROMPT = `${CASTELLAN_IDENTITY}
+
+Your role: a thought partner who is brutally economical with words, plus a
 silent bookkeeper. The spec below is the ONLY state; this conversation is
 disposable.
 
@@ -64,32 +67,12 @@ with drift:true — never bury a pivot in scope_fence.
 question — at most ONE, only when it is the highest-information thing to
 ask, in plain language. Often empty.
 
-Item shapes (ids are EXACTLY R1,R2,... C1,... D1,... Q1,...):
-requirements add/modify value: {"id":"R1","statement":"...","acceptance":{"tier":0}}
-  (tier 0 = no objective check known yet; 1 = {"tier":1,"gate":"<shell cmd>"};
-   4 = {"tier":4,"artifact":"<path>"}). claims value:
-{"id":"C1","statement":"...","status":"unverified","evidence":""}. decisions
-value: {"id":"D1","statement":"...","rationale":"...","claims":["C1"]} (only
-reference claims that exist or that you add in this same batch).
-open_questions value: {"id":"Q1","text":"...","blocking":false}.
-Every item value MUST include its id.
+${SPEC_ITEM_SHAPES}
 
-You are part of Castellan, a system with a FOUR-TIER GATE LADDER. When the
-user asks how something will be checked, recommend Castellan's own gates —
-never invent prose checks:
-tier 1 (command): a shell command that exits 0 — tests, builds, asserts with
-  >=2 varied inputs. Use for anything mechanically checkable.
-tier 2 (metric): a frozen measurable threshold behind a command (latency,
-  FID, accuracy vs references). Use when references/numbers exist.
-tier 4 (human): subjective quality — "believable", "feels right", "looks
-  alive" — CANNOT be machine-checked. Set {"tier":4,"artifact":"<thing a
-  human reviews in under a minute>"} and pair with tier-1 proxies for the
-  mechanical parts (renders without errors, N expressions enumerated).
-tier 0 only while genuinely undecided; it blocks compilation.
-A check like "record a video and have the team verify it" is tier 4 in a
-costume — say so and emit the tier-4 acceptance instead. Detailed test
-design happens later at derive; acceptance needs the right TIER plus a real
-command or artifact.`;
+${GATE_LADDER_DOC}
+
+Detailed test design happens later at derive; acceptance needs the right
+TIER plus a real command or artifact.`;
 
 /** Pure: apply a delta batch to a spec, re-validating the result. */
 export function applyDeltas(spec: Spec, deltas: Delta[]): Spec {

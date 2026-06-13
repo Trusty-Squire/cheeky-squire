@@ -2,7 +2,8 @@ import { z } from "zod";
 import { SquireError } from "../errors.js";
 import type { LlmClient } from "../llm/types.js";
 import { MissionSchema, GateSchema, type Mission, type Gate } from "./schema.js";
-import { renderGate, GATE_PATTERNS } from "./gate-patterns.js";
+import { renderGate } from "./gate-patterns.js";
+import { CASTELLAN_IDENTITY, GATE_LADDER_DOC, gatePatternDoc } from "./self-knowledge.js";
 import { buildRepoSurvey, tryParseJson, formatZodIssues } from "./derive.js";
 import { type Spec, unanchoredRequirements, refutedDecisions, blockingQuestions } from "./spec.js";
 
@@ -173,7 +174,7 @@ export async function deriveV2(input: DeriveV2Input): Promise<DeriveV2Result> {
     llm,
     model,
     "decompose",
-    "You are the Herald: decompose work into 1-12 nodes forming a DAG. Briefs are self-contained (the executor sees ONLY the brief and its packed files). blast_radius is the narrowest glob set permitting the work. Distribute the budget. Do NOT write gates yet. Output ONLY JSON: {\"nodes\":[{id,brief,deps,context_globs,blast_radius,budget_usd,requirement?}]}.",
+    `${CASTELLAN_IDENTITY}\n\nYour role, the Herald: decompose work into 1-12 nodes forming a DAG. Briefs are self-contained (the executor sees ONLY the brief and its packed files). blast_radius is the narrowest glob set permitting the work. Distribute the budget. Do NOT write gates yet. Output ONLY JSON: {\"nodes\":[{id,brief,deps,context_globs,blast_radius,budget_usd,requirement?}]}.`,
     `${intent}\n\nREPOSITORY SURVEY:\n${survey}\n\nMISSION BUDGET USD: ${input.budgetUsd}`,
     DecomposeSchema,
     usage,
@@ -207,12 +208,11 @@ export async function deriveV2(input: DeriveV2Input): Promise<DeriveV2Result> {
   });
 
   if (needsInference.length > 0) {
-    const patternDoc = GATE_PATTERNS.map((p) => `- ${p.id}(${p.params.join(", ")}): ${p.description}`).join("\n");
     const inferred = await jsonStage(
       llm,
       model,
       "infer-gates",
-      `You select objective gates for plan nodes. STRONGLY prefer selecting a pattern from the library (free-form shell is flagged to the user). Patterns:\n${patternDoc}\nOutput ONLY JSON: {"gates":[{node,pattern,params} | {node,freeform}]}.`,
+      `${CASTELLAN_IDENTITY}\n\nYour role: select objective gates for plan nodes.\n\n${GATE_LADDER_DOC}\n\n${gatePatternDoc()}\n\nSTRONGLY prefer selecting a pattern (free-form shell is flagged to the user). Output ONLY JSON: {"gates":[{node,pattern,params} | {node,freeform}]}.`,
       `NODES:\n${needsInference.map((n) => `${n.id}: ${n.brief}`).join("\n")}\n\nREPOSITORY SURVEY (use REAL commands found here):\n${survey}`,
       InferGatesSchema,
       usage,
