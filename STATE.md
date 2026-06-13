@@ -37,5 +37,6 @@ Per SPEC-v0.2:
    `ser spec talk`.
 
 ## Next
-Run live gates 2-3 above; then v0.3 centerpiece per thesis: the standing-loop
-runtime (triggers, queue, recurring missions).
+TODOS.md #1: credential-free runtime (Trusty Squire injecting proxy —
+ser never holds a key). Then live gates 2-3 above; then v0.3 centerpiece
+per thesis: the standing-loop runtime (triggers, queue, recurring missions).
