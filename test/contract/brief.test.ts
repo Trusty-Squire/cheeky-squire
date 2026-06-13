@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyChoice, resolveBrief, ideaToSpec, type BriefIO } from "../../src/contract/brief.js";
+import { applyChoice, resolveBrief, ideaToSpec, ideaToTalkSpec, renderSeed, type BriefIO } from "../../src/contract/brief.js";
 import { makeStyler } from "../../src/style.js";
 import type { Decision, IdeaResult } from "../../src/contract/ingest.js";
 
@@ -101,5 +101,48 @@ describe("ideaToSpec", () => {
     const spec = ideaToSpec("a thing", { stories: [], components: [], decisions: [] }, []);
     expect(spec.requirements).toHaveLength(1);
     expect(spec.requirements[0]!.statement).toBe("a thing");
+  });
+});
+
+describe("ideaToTalkSpec + renderSeed (conversational seed)", () => {
+  const idea: IdeaResult = {
+    stories: ["she asks a question"],
+    components: [
+      { statement: "voice loop that captures speech", story: "asks", gate: { tier: 1, gate: "node --test voice" } },
+      { statement: "content filter", story: "asks", gate: { tier: 4, artifact: "safety.md" } },
+    ],
+    decisions: [
+      { question: "target hardware?", why: "every gate", recommendation: "Raspberry Pi 4", alternatives: ["phone"], bucket: 1, canGuess: false, forksHard: true, costlyToUndo: true },
+      { question: "child's age?", why: "content gate", recommendation: "6-8", alternatives: ["3-5"], bucket: 1, canGuess: false, forksHard: true, costlyToUndo: true },
+      { question: "db?", why: "storage", recommendation: "SQLite", alternatives: [], bucket: 2, canGuess: true, forksHard: true, costlyToUndo: false },
+    ],
+  };
+
+  it("bucket-1 asks become blocking questions (suggestion baked in); bucket-2 are silent defaults", () => {
+    
+    const spec = ideaToTalkSpec("a companion", idea);
+    expect(spec.requirements).toHaveLength(2);
+    expect(spec.open_questions.filter((q: { blocking: boolean }) => q.blocking)).toHaveLength(2); // the 2 asks
+    expect(spec.open_questions[0]!.text).toContain("I'd suggest: Raspberry Pi 4");
+    expect(spec.decisions).toHaveLength(1); // the default
+    expect(spec.decisions[0]!.statement).toContain("db? → SQLite");
+    // not ready: blocking questions remain
+    expect(spec.open_questions.some((q) => q.blocking)).toBe(true);
+  });
+
+  it("renderSeed summarizes the pieces and asks the first fork with a suggestion", () => {
+    
+    const r = renderSeed(idea);
+    expect(r).toContain("2 pieces");
+    expect(r).toContain("2 in all"); // 2 asks
+    expect(r).toContain("target hardware?");
+    expect(r).toContain("Raspberry Pi 4");
+  });
+
+  it("renderSeed with no asks invites a build", () => {
+    
+    const r = renderSeed({ ...idea, decisions: [] });
+    expect(r).toContain("Nothing needs you");
+    expect(r).toContain("build it");
   });
 });

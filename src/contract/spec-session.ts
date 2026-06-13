@@ -158,6 +158,11 @@ forks are e.g.: target hardware/runtime (the user holds this — changes every
 gate), the child's age (sets the content gate), what "safe" must concretely
 mean (the tier-4 artifact). Typically 1-3 for a new product, then none.
 
+WALK the open questions ONE AT A TIME. After this turn's edits, if any blocking
+open_question remains, ask exactly ONE — the most important — at the end of
+your reply, in plain words, including your suggested answer ("I'd go with X").
+Ask only that one; do not list them all. When none remain, do not ask anything.
+
 question field — surface at most ONE terse fork in the reply per turn (the
 highest-value one); record ALL the forks as blocking open_questions regardless.
 Once you have proposed gates for the requirements, RESOLVE the blank-spec

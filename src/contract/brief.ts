@@ -114,3 +114,54 @@ export function ideaToSpec(prompt: string, idea: IdeaResult, resolutions: Resolu
     open_questions: [],
   });
 }
+
+/**
+ * Seed a CONVERSATIONAL spec from the idea phase (used by `ser talk`): the
+ * components become gated requirements; bucket-1 ASKs become BLOCKING open
+ * questions (with ser's suggestion baked into the text, so the conversation
+ * can offer it); bucket-2 defaults are recorded silently as ser's calls. The
+ * talk loop then walks the open questions one at a time.
+ */
+export function ideaToTalkSpec(prompt: string, idea: IdeaResult): Spec {
+  const requirements = idea.components.map((c, i) => ({
+    id: `R${i + 1}`,
+    statement: c.statement,
+    acceptance: normAcceptance(c.gate),
+  }));
+  if (requirements.length === 0) requirements.push({ id: "R1", statement: prompt, acceptance: { tier: 0 } });
+
+  const asks = idea.decisions.filter((d) => d.bucket === 1);
+  const defaults = idea.decisions.filter((d) => d.bucket === 2);
+  const open_questions = asks.map((d, i) => ({
+    id: `Q${i + 1}`,
+    text: d.recommendation ? `${d.question} (I'd suggest: ${d.recommendation})` : d.question,
+    blocking: true,
+  }));
+  const decisions = defaults.map((d, i) => ({
+    id: `D${i + 1}`,
+    statement: `${d.question} → ${d.recommendation}`,
+    rationale: "ser default",
+    claims: [] as string[],
+  }));
+  return SpecSchema.parse({ thesis: prompt, stories: idea.stories, scope_fence: [], requirements, decisions, claims: [], open_questions });
+}
+
+/** A short inline form of a recommendation — trimmed of trailing punctuation, capped. */
+function shortRec(rec: string): string {
+  const t = rec.replace(/^(default to|use|go with)\s+/i, "").replace(/[.\s]+$/, "").trim();
+  return t.length > 70 ? t.slice(0, 67).replace(/\s+\S*$/, "") + "…" : t;
+}
+
+/** The conversational reply for the seed turn — a plain-words summary + the first fork. */
+export function renderSeed(idea: IdeaResult): string {
+  const names = idea.components.map((c) => c.statement.replace(/\s+(that|which|for|to)\s+.*/i, "").trim()).slice(0, 6);
+  const asks = idea.decisions.filter((d) => d.bucket === 1);
+  let r = `I'd build this as ${idea.components.length} piece${idea.components.length === 1 ? "" : "s"}: ${names.join(", ")}.`;
+  if (asks.length > 0) {
+    const more = asks.length > 1 ? ` (${asks.length} in all)` : "";
+    r += `\n\nA few calls only you can make${more}. First — ${asks[0]!.question}` + (asks[0]!.recommendation ? ` I'd go with ${shortRec(asks[0]!.recommendation)}.` : "");
+  } else {
+    r += `\n\nNothing needs you — say "build it" when you're ready.`;
+  }
+  return r;
+}

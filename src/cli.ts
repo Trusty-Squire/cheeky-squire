@@ -372,76 +372,79 @@ async function cmdTalk(args: string[]): Promise<number> {
       return executeMissionObject(mission, dirname(missionPath), runFlags, basename(missionPath).replace(/\.[^.]+$/, ""));
     },
   };
-  process.stdout.write(
-    st.bold("ser") + st.gray(" — talk normally; the notebook updates itself. ") +
-      st.gray("'undo' reverts, empty line exits.") + "\n",
-  );
+  const { extractIdea } = await import("./contract/ingest.js");
+  const { ideaToTalkSpec, renderSeed } = await import("./contract/brief.js");
+  const { scoreSpec } = await import("./contract/spec-score.js");
+  const { writeFileSync: w } = await import("node:fs");
+  type Spec = ReturnType<typeof session.load>;
+
+  // The notebook updates in the BACKGROUND. A turn shows ser's reply (the
+  // conversation), a single dim note of what changed, and readiness only the
+  // moment it flips to buildable — never a per-turn diagnostic dump.
+  const fresh = (sp: Spec): boolean =>
+    /^TODO/.test(sp.thesis) || (sp.requirements.length === 1 && /^TODO/.test(sp.requirements[0]!.statement));
+  const isCommand = (m: string): boolean => /^(build|run|ship|check|derive|status|score|ready|verify)\b/i.test(m);
+  let lastReady = (await scoreSpec(session.load())).ready;
+  const note = (s: string): void => { process.stdout.write(st.dim("· " + s) + "\n"); };
+
+  process.stdout.write(st.bold("ser") + st.gray(" — just talk. it builds the plan as you go; 'undo' reverts, empty line exits.") + "\n");
   let undoStack: string[] = [];
   for (;;) {
-    const msg = (await ask(st.cyan(st.bold("you")) + st.gray("> "))).trim();
+    const msg = (await ask("\n" + st.cyan(st.bold("you")) + st.gray("  "))).trim();
     if (!msg) return 0;
     if (msg === "undo") {
       const prev = undoStack.pop();
-      if (!prev) { process.stdout.write(st.gray("  nothing to undo") + "\n"); continue; }
-      const { writeFileSync: w } = await import("node:fs");
+      if (!prev) { note("nothing to undo"); continue; }
       w(session.path, prev);
-      session.reject(); // repeated undos escalate the model
-      process.stdout.write(st.yellow(`  reverted (next turn on ${session.currentModel()})`) + "\n");
+      session.reject();
+      note(`reverted (next on ${session.currentModel()})`);
+      lastReady = (await scoreSpec(session.load())).ready;
       continue;
     }
     const before = readFileSync(session.path, "utf8");
     try {
+      // CONVERGENCE: a fresh spec's first substantive message goes through the
+      // calibrated idea phase (decompose + bucket), not the legacy mapper.
+      if (fresh(session.load()) && !isCommand(msg)) {
+        process.stdout.write(st.dim("  …working it out") + "\n");
+        const idea = await extractIdea(msg, llm, chain.executor);
+        undoStack.push(before);
+        w(session.path, (await import("yaml")).stringify(ideaToTalkSpec(msg, idea)));
+        process.stdout.write("\n" + renderSeed(idea) + "\n");
+        note(`${idea.components.length} requirements, ${idea.decisions.filter((d) => d.bucket === 1).length} to decide`);
+        lastReady = (await scoreSpec(session.load())).ready;
+        continue;
+      }
+
       const batch = await session.turn(msg);
-      if (batch.reply) process.stdout.write(`\n${batch.reply}\n`);
-      if (batch.pivot) process.stdout.write(st.yellow("  [pivot — new product; the old spec was reset. 'undo' to restore it]") + "\n");
+      if (batch.reply) process.stdout.write("\n" + batch.reply + "\n");
+      if (batch.pivot) note("pivot — new product; old spec reset ('undo' restores it)");
       if (batch.deltas.length > 0) {
         const { applied, dropped } = await session.acceptLenient(batch);
         if (applied.length > 0) {
           undoStack.push(before);
           if (undoStack.length > 20) undoStack = undoStack.slice(-20);
-          process.stdout.write(st.gray("  [spec ") + styleDeltaSummary(applied, st) + st.gray("]") + "\n");
+          note(styleDeltaSummary(applied, st));
         }
-        for (const drop of dropped) {
-          process.stdout.write(
-            st.dim(st.red(`  [edit dropped (${drop.delta.section}${drop.delta.id ? ":" + drop.delta.id : ""}): ${drop.reason}]`)) + "\n",
-          );
-        }
+        if (dropped.length > 0) note(st.red(`${dropped.length} edit(s) didn't apply`));
       }
       if (batch.action !== "none") {
         try {
-          const lines = await dispatchAction(batch.action, batch.action_arg, actionCtx);
-          for (const line of lines) {
-            const colored = /REFUTED|⚠|halted|cancelled|not buildable|not ready/i.test(line)
-              ? st.red(line)
-              : /READY|complete|every requirement|building\./i.test(line)
-                ? st.green(line)
-                : line;
-            process.stdout.write(`${colored}\n`);
+          for (const line of await dispatchAction(batch.action, batch.action_arg, actionCtx)) {
+            const colored = /REFUTED|⚠|halted|cancelled|not buildable|not ready/i.test(line) ? st.red(line)
+              : /READY|complete|every requirement|building\./i.test(line) ? st.green(line) : line;
+            process.stdout.write(colored + "\n");
           }
         } catch (err) {
-          process.stdout.write(st.dim(st.red(`  [${batch.action} failed: ${(err as Error).message.split("\n")[0]} — keep talking]`)) + "\n");
+          note(st.red(`${batch.action} failed: ${(err as Error).message.split("\n")[0]}`));
         }
       }
-      // Self-diagnose every turn: score the spec and surface the single next
-      // decision/suggestion. Green when build-ready, yellow while blockers remain.
-      let scored = false;
-      try {
-        const { scoreSpec, renderScoreLine } = await import("./contract/spec-score.js");
-        const { parseSpec: ps } = await import("./contract/spec.js");
-        const s = await scoreSpec(ps(readFileSync(session.path, "utf8"), session.path), {
-          llm,
-          model: chain.executor,
-        });
-        process.stdout.write((s.ready ? st.green : st.yellow)(renderScoreLine(s)) + "\n");
-        scored = true;
-      } catch {
-        // scoring is best-effort; never block the conversation on it
-      }
-      // The mapper's own question is a fallback only if scoring didn't surface one.
-      if (!scored && batch.question) process.stdout.write(st.cyan(`? ${batch.question}`) + "\n");
+      // Readiness: announce ONLY on the flip to buildable (mechanical = instant, free).
+      const ready = (await scoreSpec(session.load())).ready;
+      if (ready && !lastReady) process.stdout.write(st.green('\n✓ that\'s buildable — say "build it" when you want to go.') + "\n");
+      lastReady = ready;
     } catch (err) {
-      // The conversation never dies for bookkeeping reasons.
-      process.stdout.write(st.dim(st.red(`  [turn failed: ${(err as Error).message.split("\n")[0]} — keep talking]`)) + "\n");
+      note(st.red(`hiccup: ${(err as Error).message.split("\n")[0]} — keep talking`));
     }
   }
 }
