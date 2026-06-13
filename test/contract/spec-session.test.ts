@@ -134,3 +134,32 @@ describe("checkSpec — the five gates, mechanical subset", () => {
     expect(r2.lines.join("\n")).toContain("READY to compile");
   });
 });
+
+describe("bookkeeping never kills the conversation", () => {
+  it("salvageBatch keeps reply/question and individually-valid deltas", async () => {
+    const { salvageBatch } = await import("../../src/contract/spec-session.js");
+    const b = salvageBatch({
+      reply: "build a voice loop on a Pi",
+      question: "voice only?",
+      deltas: [
+        { section: "claims", op: "add", value: { id: "C1", statement: "x" } }, // valid
+        { section: "nonsense", op: "add" }, // invalid section — dropped
+      ],
+    });
+    expect(b.reply).toContain("voice loop");
+    expect(b.deltas).toHaveLength(1);
+  });
+
+  it("applyDeltasLenient applies the good edits and reports the bad", async () => {
+    const { applyDeltasLenient } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(baseSpec);
+    const r = applyDeltasLenient(spec, [
+      { section: "claims", op: "add", value: { id: "C1", statement: "ok", status: "unverified", evidence: "" }, drift: false },
+      { section: "decisions", op: "add", value: { id: "D1", statement: "bad", rationale: "r", claims: ["C99"] }, drift: false },
+    ]);
+    expect(r.applied).toHaveLength(1);
+    expect(r.dropped).toHaveLength(1);
+    expect(r.spec.claims[0]!.id).toBe("C1");
+    expect(r.dropped[0]!.reason).toContain("C99");
+  });
+});

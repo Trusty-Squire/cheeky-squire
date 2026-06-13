@@ -321,22 +321,28 @@ async function cmdSpec(args: string[]): Promise<number> {
         continue;
       }
       const before = readFileSync(session.path, "utf8");
-      const batch = await session.turn(msg);
-      if (batch.reply) process.stdout.write(`\n${batch.reply}\n`);
-      if (batch.deltas.length > 0) {
-        try {
-          await session.accept(batch);
-          undoStack.push(before);
-          if (undoStack.length > 20) undoStack = undoStack.slice(-20);
-          const summary = batch.deltas
-            .map((d) => `${d.op === "add" ? "+" : d.op === "remove" ? "-" : "~"}${d.section}${d.id ? ":" + d.id : ""}${d.drift ? "⚠drift" : ""}`)
-            .join(" ");
-          process.stdout.write(`  [spec ${summary}]\n`);
-        } catch (err) {
-          process.stdout.write(`  [spec edits dropped: ${(err as Error).message.split("\n")[0]}]\n`);
+      try {
+        const batch = await session.turn(msg);
+        if (batch.reply) process.stdout.write(`\n${batch.reply}\n`);
+        if (batch.deltas.length > 0) {
+          const { applied, dropped } = await session.acceptLenient(batch);
+          if (applied.length > 0) {
+            undoStack.push(before);
+            if (undoStack.length > 20) undoStack = undoStack.slice(-20);
+            const summary = applied
+              .map((d) => `${d.op === "add" ? "+" : d.op === "remove" ? "-" : "~"}${d.section}${d.id ? ":" + d.id : ""}${d.drift ? "⚠drift" : ""}`)
+              .join(" ");
+            process.stdout.write(`  [spec ${summary}]\n`);
+          }
+          for (const drop of dropped) {
+            process.stdout.write(`  [edit dropped (${drop.delta.section}${drop.delta.id ? ":" + drop.delta.id : ""}): ${drop.reason}]\n`);
+          }
         }
+        if (batch.question) process.stdout.write(`? ${batch.question}\n`);
+      } catch (err) {
+        // The conversation never dies for bookkeeping reasons.
+        process.stdout.write(`  [turn failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);
       }
-      if (batch.question) process.stdout.write(`? ${batch.question}\n`);
     }
   }
 

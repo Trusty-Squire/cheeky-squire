@@ -62,7 +62,16 @@ the message pivots to a DIFFERENT product, include a thesis modify delta
 with drift:true — never bury a pivot in scope_fence.
 
 question — at most ONE, only when it is the highest-information thing to
-ask, in plain language. Often empty.`;
+ask, in plain language. Often empty.
+
+Item shapes (ids are EXACTLY R1,R2,... C1,... D1,... Q1,...):
+requirements add/modify value: {"id":"R1","statement":"...","acceptance":{"tier":0}}
+  (tier 0 = no objective check known yet; 1 = {"tier":1,"gate":"<shell cmd>"};
+   4 = {"tier":4,"artifact":"<path>"}). claims value:
+{"id":"C1","statement":"...","status":"unverified","evidence":""}. decisions
+value: {"id":"D1","statement":"...","rationale":"...","claims":["C1"]} (only
+reference claims that exist or that you add in this same batch).
+open_questions value: {"id":"Q1","text":"...","blocking":false}.`;
 
 /** Pure: apply a delta batch to a spec, re-validating the result. */
 export function applyDeltas(spec: Spec, deltas: Delta[]): Spec {
@@ -113,6 +122,47 @@ export function applyDeltas(spec: Spec, deltas: Delta[]): Spec {
     );
   }
   return checked.data;
+}
+
+/** Keep the conversation, salvage individually-valid deltas, drop the rest. */
+export function salvageBatch(raw: unknown): DeltaBatch {
+  const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const deltas: Delta[] = [];
+  if (Array.isArray(o.deltas)) {
+    for (const d of o.deltas) {
+      const ok = DeltaSchema.safeParse(d);
+      if (ok.success) deltas.push(ok.data);
+    }
+  }
+  return {
+    deltas,
+    question: typeof o.question === "string" ? o.question : "",
+    reply: typeof o.reply === "string" ? o.reply : "",
+    note: "",
+  };
+}
+
+/**
+ * Apply deltas one at a time, skipping any that would invalidate the spec —
+ * the bookkeeper must never lose the whole batch (or the conversation) to one
+ * bad edit. Returns what applied and why the rest dropped.
+ */
+export function applyDeltasLenient(
+  spec: Spec,
+  deltas: Delta[],
+): { spec: Spec; applied: Delta[]; dropped: { delta: Delta; reason: string }[] } {
+  let current = spec;
+  const applied: Delta[] = [];
+  const dropped: { delta: Delta; reason: string }[] = [];
+  for (const d of deltas) {
+    try {
+      current = applyDeltas(current, [d]);
+      applied.push(d);
+    } catch (err) {
+      dropped.push({ delta: d, reason: (err as Error).message.split("\n").slice(0, 2).join(" ") });
+    }
+  }
+  return { spec: current, applied, dropped };
 }
 
 /** Mechanical drift check: flag deltas the proposer didn't self-flag. */
@@ -175,12 +225,17 @@ export class SpecSession {
       if (parsed.ok) {
         const checked = DeltaBatchSchema.safeParse(parsed.value);
         if (checked.success) return markDrift(checked.data);
+        if (attempt === 1) return salvageBatch(parsed.value); // degrade, never crash
         note = `\n\nYour previous output failed validation:\n${formatZodIssues(checked.error.issues)}`;
       } else {
+        if (attempt === 1) {
+          // Bookkeeping failed twice; keep the conversation alive with raw text.
+          return { deltas: [], question: "", note: "", reply: res.text.slice(0, 400) };
+        }
         note = `\n\nYour previous output was not valid JSON: ${parsed.error}`;
       }
     }
-    throw new SquireError("SPEC_TURN_INVALID", "delta proposal invalid after one retry");
+    throw new SquireError("SPEC_TURN_INVALID", "unreachable");
   }
 
   /** Accept a batch: apply, save, git-commit. Resets the rejection counter. */
@@ -198,6 +253,21 @@ export class SpecSession {
       );
     }
     return next;
+  }
+
+  /** Lenient accept: apply what validates, report what dropped. Saves + commits when anything applied. */
+  async acceptLenient(batch: DeltaBatch): Promise<{ applied: Delta[]; dropped: { delta: Delta; reason: string }[] }> {
+    const { spec, applied, dropped } = applyDeltasLenient(this.load(), batch.deltas);
+    if (applied.length > 0) {
+      writeFileSync(this.path, yamlStringify(spec));
+      this.consecutiveRejections = 0;
+      if (this.opts.git !== false) {
+        const dir = dirname(this.path);
+        await execa("git", ["add", basename(this.path)], { cwd: dir, reject: false });
+        await execa("git", ["commit", "-q", "-m", `spec(${basename(this.path)}): ${applied.length} delta(s)`], { cwd: dir, reject: false });
+      }
+    }
+    return { applied, dropped };
   }
 
   /** Reject a batch: nothing applies; repeated rejections escalate the model. */
