@@ -384,9 +384,12 @@ describe("self-knowledge composition (no architectural drift between prompts)", 
     expect(DELTA_MAPPER_PROMPT).toContain("NEVER re-ask");
     // raises the load-bearing forks (changes a gate/decision/feasibility) as
     // blocking questions, and decomposes a product into capabilities
-    expect(DELTA_MAPPER_PROMPT).toContain("change a GATE, a DECISION, or a FEASIBILITY");
+    expect(DELTA_MAPPER_PROMPT).toContain("changes a GATE, a DECISION, or a FEASIBILITY");
     expect(DELTA_MAPPER_PROMPT).toContain("BLOCKING open_question");
     expect(DELTA_MAPPER_PROMPT).toContain("decompose it into the CAPABILITIES");
+    // dogfood 2026-06-13: resolve answered questions; default tech, don't ask
+    expect(DELTA_MAPPER_PROMPT).toContain("emit op:resolve for that open_question");
+    expect(DELTA_MAPPER_PROMPT).toContain("TECHNICAL choices are YOURS to default");
     expect(DELTA_MAPPER_PROMPT.replace(/\s+/g, " ")).toContain("thesis modify value is ALWAYS a plain string");
     // unified interface: the mapper requests harness commands, never performs them
     expect(DELTA_MAPPER_PROMPT).toContain('setting "action"');
