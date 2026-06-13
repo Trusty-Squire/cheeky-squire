@@ -79,7 +79,9 @@ For each user message output JSON:
 
 reply — actually engage: answer their question, reason, push back, propose.
 Hard cap 80 words. No preamble, no praise, no restating, no filler. If they
-ask how to build it, sketch the build in <=80 words.
+ask how to build it, sketch the build in <=80 words. Your reply must MATCH
+the deltas you emit — never claim you recorded something you did not put in
+deltas; the harness prints the receipts and a mismatch is a visible lie.
 
 deltas — IN THE BACKGROUND, record everything decided, claimed, required, or
 asked as spec deltas (add/modify/resolve/remove by section and id). Nothing
@@ -90,8 +92,29 @@ thesis is still a TODO placeholder this is a NEW spec — the first real idea
 SETS it (thesis modify, drift:false), and TODO placeholders (thesis, R1)
 are REPLACED with real content, never kept alongside additions.
 
-question — at most ONE, only when it is the highest-information thing to
-ask, in plain language. Often empty.
+CRITICAL — capture what the user states, never make them repeat it:
+- thesis modify value is ALWAYS a plain string, never an object.
+- When the user says WHAT to build ("an ai companion for my daughter"),
+  that IS the first requirement: emit {section:requirements, op:modify,
+  id:"R1", value:{id:"R1","statement":"<their words>","acceptance":{tier:0}}}
+  to fill the R1 placeholder. Then propose its gate (below). Do NOT ask
+  them to restate the goal — if they already said it, record it.
+
+PROPOSE gates; never interrogate. You own the gate ladder — the user does
+not. When a requirement has tier-0 (no check), CHOOSE the check yourself and
+put it in acceptance:
+- mechanical/behavioral -> tier 1 {"tier":1,"gate":"<shell cmd>"}.
+- subjective quality ("safe", "feels alive", "child-appropriate") -> tier 4
+  {"tier":4,"artifact":"<path a human reviews in <1 min>"}, paired with
+  tier-1 proxies for the mechanical parts as separate requirements.
+Resolve the blocking Q1 ("first requirement's objective check") in the SAME
+batch you set R1's acceptance. NEVER ask the user "what should the check be?"
+— propose it. NEVER ask the same question twice; if the user pushes back
+("i just told you"), they are right — record their last message and advance.
+
+question — at most ONE, only when it is a genuine FORK you cannot resolve
+yourself (never a gate you should propose, never a goal already stated).
+Usually empty.
 
 ${SPEC_ITEM_SHAPES}
 
@@ -202,6 +225,107 @@ export function markDrift(batch: DeltaBatch): DeltaBatch {
   return batch; // proposer-flagged only in v0.2; mechanical NLI check is v0.3 (A26)
 }
 
+const LIST_PREFIX: Record<string, string> = {
+  requirements: "R",
+  decisions: "D",
+  claims: "C",
+  open_questions: "Q",
+};
+
+function isPlaceholderReq(r: unknown): boolean {
+  const o = r as { statement?: unknown };
+  return typeof o?.statement === "string" && /^TODO\b/i.test(o.statement);
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    for (const k of ["value", "statement", "thesis", "text"]) {
+      if (typeof o[k] === "string") return o[k] as string;
+    }
+  }
+  return null;
+}
+
+function nextId(prefix: string, list: { id: string }[]): string {
+  let max = 0;
+  for (const x of list) {
+    const m = new RegExp(`^${prefix}(\\d+)$`).exec(x.id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `${prefix}${max + 1}`;
+}
+
+/**
+ * Repair the cheap model's near-miss deltas so the user's words actually land
+ * (dogfood: a `modify` with no id, or a thesis modify carrying an object,
+ * silently dropped the user's stated goal and the bookkeeper then asked them
+ * to repeat it). Conservative — it only fixes mechanical id/shape mistakes,
+ * never invents content:
+ *  - thesis modify with a non-string value -> the extracted string.
+ *  - list modify whose id is missing/unknown -> the id carried in value, or
+ *    the TODO placeholder for requirements, else converted to an add.
+ *  - requirement add/fill with no acceptance -> tier 0 (unanchored) so the
+ *    statement is captured now and gated next.
+ */
+export function normalizeDeltas(spec: Spec, deltas: Delta[]): Delta[] {
+  const out: Delta[] = [];
+  const reqs = spec.requirements as { id: string; statement: string }[];
+  let placeholderId: string | undefined = reqs.find(isPlaceholderReq)?.id;
+
+  const withAcceptance = (val: Record<string, unknown>, id: string): Record<string, unknown> => {
+    const v: Record<string, unknown> = { ...val, id };
+    if (v.acceptance === undefined) v.acceptance = { tier: 0 };
+    return v;
+  };
+
+  for (const d of deltas) {
+    if (d.section === "thesis") {
+      if (d.op === "modify") {
+        const s = asString(d.value);
+        out.push(s !== null ? { ...d, value: s } : d);
+      } else out.push(d);
+      continue;
+    }
+
+    const list = (spec as unknown as Record<string, { id: string }[]>)[d.section] ?? [];
+    const ids = new Set(list.map((x) => x.id));
+    const val = d.value && typeof d.value === "object" ? (d.value as Record<string, unknown>) : undefined;
+    const valId = typeof val?.id === "string" ? (val.id as string) : undefined;
+
+    if (d.op === "modify") {
+      const targetId = d.id && ids.has(d.id) ? d.id : valId && ids.has(valId) ? valId : undefined;
+      if (targetId) {
+        out.push({ ...d, id: targetId, value: val ? { ...val, id: targetId } : d.value });
+        continue;
+      }
+      // No resolvable target. For requirements, fill the TODO placeholder.
+      if (d.section === "requirements" && placeholderId) {
+        out.push({ ...d, op: "modify", id: placeholderId, value: withAcceptance(val ?? {}, placeholderId) });
+        placeholderId = undefined;
+        continue;
+      }
+      // Otherwise upsert: convert to an add with a real id (value-supplied or next).
+      const id = valId ?? nextId(LIST_PREFIX[d.section]!, list);
+      const value = d.section === "requirements" ? withAcceptance(val ?? {}, id) : { ...(val ?? {}), id };
+      out.push({ ...d, op: "add", id: undefined, value });
+      continue;
+    }
+
+    // An add of a real requirement while the placeholder still exists fills it
+    // (so we never keep a TODO R1 beside the real one).
+    if (d.op === "add" && d.section === "requirements" && placeholderId && !isPlaceholderReq(val)) {
+      out.push({ ...d, op: "modify", id: placeholderId, value: withAcceptance(val ?? {}, placeholderId) });
+      placeholderId = undefined;
+      continue;
+    }
+
+    out.push(d);
+  }
+  return out;
+}
+
 export interface SpecSessionOptions {
   path: string;
   llm: LlmClient;
@@ -256,8 +380,14 @@ export class SpecSession {
       const parsed = tryParseJson(res.text);
       if (parsed.ok) {
         const checked = DeltaBatchSchema.safeParse(parsed.value);
-        if (checked.success) return markDrift(checked.data);
-        if (attempt === 1) return salvageBatch(parsed.value); // degrade, never crash
+        if (checked.success) {
+          const b = markDrift(checked.data);
+          return { ...b, deltas: normalizeDeltas(spec, b.deltas) };
+        }
+        if (attempt === 1) {
+          const b = salvageBatch(parsed.value); // degrade, never crash
+          return { ...b, deltas: normalizeDeltas(spec, b.deltas) };
+        }
         note = `\n\nYour previous output failed validation:\n${formatZodIssues(checked.error.issues)}`;
       } else {
         if (attempt === 1) {

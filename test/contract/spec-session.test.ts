@@ -166,6 +166,72 @@ describe("bookkeeping never kills the conversation", () => {
   });
 });
 
+describe("normalizeDeltas (the user's words must land — dogfood 2026-06-13)", () => {
+  const blank = `
+thesis: "TODO: one paragraph — pinned; drift is flagged against this"
+requirements:
+  - id: R1
+    statement: "TODO"
+    acceptance: { tier: 0 }
+open_questions:
+  - { id: Q1, text: "first check?", blocking: true }
+`;
+
+  it("thesis modify carrying an object is coerced to its string (was dropped)", async () => {
+    const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(blank);
+    const fixed = normalizeDeltas(spec, [
+      { section: "thesis", op: "modify", value: { statement: "an ambient ai companion" }, drift: false },
+    ]);
+    expect(fixed[0]!.value).toBe("an ambient ai companion");
+    // and it now applies cleanly
+    expect(applyDeltas(spec, fixed).thesis).toBe("an ambient ai companion");
+  });
+
+  it("a requirements modify with NO id fills the R1 TODO placeholder (was 'undefined not found')", async () => {
+    const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(blank);
+    const fixed = normalizeDeltas(spec, [
+      { section: "requirements", op: "modify", value: { statement: "build an ai companion for my daughter" }, drift: false },
+    ]);
+    expect(fixed[0]).toMatchObject({ op: "modify", id: "R1" });
+    const next = applyDeltas(spec, fixed);
+    expect(next.requirements[0]!.statement).toContain("companion");
+    expect(next.requirements).toHaveLength(1); // filled R1, didn't add R2
+  });
+
+  it("a requirement add while the placeholder exists fills R1 instead of stacking a TODO", async () => {
+    const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(blank);
+    const fixed = normalizeDeltas(spec, [
+      { section: "requirements", op: "add", value: { statement: "voice interface", acceptance: { tier: 0 } }, drift: false },
+    ]);
+    const next = applyDeltas(spec, fixed);
+    expect(next.requirements).toHaveLength(1);
+    expect(next.requirements[0]!.statement).toBe("voice interface");
+  });
+
+  it("a modify to an unknown id with a full value upserts as an add", async () => {
+    const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(baseSpec); // R1 is real (not a placeholder)
+    const fixed = normalizeDeltas(spec, [
+      { section: "claims", op: "modify", id: "C1", value: { id: "C1", statement: "x", status: "unverified", evidence: "" }, drift: false },
+    ]);
+    expect(fixed[0]!.op).toBe("add");
+    expect(applyDeltas(spec, fixed).claims[0]!.id).toBe("C1");
+  });
+
+  it("leaves a well-formed modify to an existing id untouched", async () => {
+    const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(baseSpec);
+    const fixed = normalizeDeltas(spec, [
+      { section: "requirements", op: "modify", id: "R1", value: { statement: "compile specs v2" }, drift: false },
+    ]);
+    expect(fixed[0]).toMatchObject({ op: "modify", id: "R1" });
+    expect(applyDeltas(spec, fixed).requirements[0]!.statement).toBe("compile specs v2");
+  });
+});
+
 describe("self-knowledge composition (no architectural drift between prompts)", () => {
   it("spec-talk and derive prompts share the canonical gate ladder and identity", async () => {
     const { DELTA_MAPPER_PROMPT } = await import("../../src/contract/spec-session.js");
@@ -178,6 +244,11 @@ describe("self-knowledge composition (no architectural drift between prompts)", 
     // dogfood 2026-06-11: "build it" made spec-talk roleplay a completed build
     // ("Demo ready") and try to resolve requirements to match its own fiction.
     expect(DELTA_MAPPER_PROMPT.replace(/\s+/g, " ")).toContain("NEVER claim work was performed");
+    // dogfood 2026-06-13: mapper must propose gates and not interrogate, and
+    // must capture the stated goal instead of asking the user to repeat it
+    expect(DELTA_MAPPER_PROMPT).toContain("PROPOSE gates; never interrogate");
+    expect(DELTA_MAPPER_PROMPT).toContain("NEVER ask the same question twice");
+    expect(DELTA_MAPPER_PROMPT.replace(/\s+/g, " ")).toContain("thesis modify value is ALWAYS a plain string");
     // unified interface: the mapper requests harness commands, never performs them
     expect(DELTA_MAPPER_PROMPT).toContain('setting "action"');
     for (const a of ["check", "verify", "derive", "run", "status"]) {
