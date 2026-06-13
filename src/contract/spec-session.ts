@@ -238,6 +238,28 @@ const LIST_PREFIX: Record<string, string> = {
   open_questions: "Q",
 };
 
+/** Schema-valid id for a list section is exactly <prefix><digits> (e.g. R1, D2). */
+function validListId(section: string, id: unknown): id is string {
+  const p = LIST_PREFIX[section];
+  return typeof id === "string" && p !== undefined && new RegExp(`^${p}\\d+$`).test(id);
+}
+
+/** Allocator that hands out fresh schema-valid ids, never colliding with taken ones. */
+function makeIdAllocator(section: string, taken: Set<string>): () => string {
+  const prefix = LIST_PREFIX[section]!;
+  let n = 0;
+  for (const id of taken) {
+    const m = new RegExp(`^${prefix}(\\d+)$`).exec(id);
+    if (m) n = Math.max(n, Number(m[1]));
+  }
+  return () => {
+    n += 1;
+    const id = `${prefix}${n}`;
+    taken.add(id);
+    return id;
+  };
+}
+
 function isPlaceholderReq(r: unknown): boolean {
   const o = r as { statement?: unknown };
   return typeof o?.statement === "string" && /^TODO\b/i.test(o.statement);
@@ -252,15 +274,6 @@ function asString(value: unknown): string | null {
     }
   }
   return null;
-}
-
-function nextId(prefix: string, list: { id: string }[]): string {
-  let max = 0;
-  for (const x of list) {
-    const m = new RegExp(`^${prefix}(\\d+)$`).exec(x.id);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return `${prefix}${max + 1}`;
 }
 
 /**
@@ -280,10 +293,30 @@ export function normalizeDeltas(spec: Spec, deltas: Delta[]): Delta[] {
   const reqs = spec.requirements as { id: string; statement: string }[];
   let placeholderId: string | undefined = reqs.find(isPlaceholderReq)?.id;
 
+  // Per-section id bookkeeping: a running set of taken ids (so a batch of adds
+  // gets distinct fresh ids) and an allocator for invalid/missing/colliding ones.
+  const sections = ["requirements", "decisions", "claims", "open_questions"] as const;
+  const taken: Record<string, Set<string>> = {};
+  const alloc: Record<string, () => string> = {};
+  for (const s of sections) {
+    taken[s] = new Set(((spec as unknown as Record<string, { id: string }[]>)[s] ?? []).map((x) => x.id));
+    alloc[s] = makeIdAllocator(s, taken[s]!);
+  }
+
   const withAcceptance = (val: Record<string, unknown>, id: string): Record<string, unknown> => {
     const v: Record<string, unknown> = { ...val, id };
     if (v.acceptance === undefined) v.acceptance = { tier: 0 };
     return v;
+  };
+  // Add to a list with a guaranteed-valid, non-colliding id (repairs R1.1, dupes, missing).
+  const emitAdd = (d: Delta, val: Record<string, unknown> | undefined): void => {
+    const section = d.section;
+    const provided = val?.id;
+    const id = validListId(section, provided) && !taken[section]!.has(provided as string)
+      ? ((taken[section]!.add(provided as string), provided as string))
+      : alloc[section]!();
+    const value = section === "requirements" ? withAcceptance(val ?? {}, id) : { ...(val ?? {}), id };
+    out.push({ ...d, op: "add", id: undefined, value });
   };
 
   for (const d of deltas) {
@@ -294,9 +327,13 @@ export function normalizeDeltas(spec: Spec, deltas: Delta[]): Delta[] {
       } else out.push(d);
       continue;
     }
+    // scope_fence holds plain strings, not id-bearing items — pass through.
+    if (d.section === "scope_fence") {
+      out.push(d);
+      continue;
+    }
 
-    const list = (spec as unknown as Record<string, { id: string }[]>)[d.section] ?? [];
-    const ids = new Set(list.map((x) => x.id));
+    const ids = taken[d.section]!;
     const val = d.value && typeof d.value === "object" ? (d.value as Record<string, unknown>) : undefined;
     const valId = typeof val?.id === "string" ? (val.id as string) : undefined;
 
@@ -312,18 +349,20 @@ export function normalizeDeltas(spec: Spec, deltas: Delta[]): Delta[] {
         placeholderId = undefined;
         continue;
       }
-      // Otherwise upsert: convert to an add with a real id (value-supplied or next).
-      const id = valId ?? nextId(LIST_PREFIX[d.section]!, list);
-      const value = d.section === "requirements" ? withAcceptance(val ?? {}, id) : { ...(val ?? {}), id };
-      out.push({ ...d, op: "add", id: undefined, value });
+      // Otherwise upsert: convert to an add with a guaranteed-valid id.
+      emitAdd(d, val);
       continue;
     }
 
-    // An add of a real requirement while the placeholder still exists fills it
-    // (so we never keep a TODO R1 beside the real one).
-    if (d.op === "add" && d.section === "requirements" && placeholderId && !isPlaceholderReq(val)) {
-      out.push({ ...d, op: "modify", id: placeholderId, value: withAcceptance(val ?? {}, placeholderId) });
-      placeholderId = undefined;
+    if (d.op === "add") {
+      // An add of a real requirement while the placeholder still exists fills it
+      // (so we never keep a TODO R1 beside the real one).
+      if (d.section === "requirements" && placeholderId && !isPlaceholderReq(val)) {
+        out.push({ ...d, op: "modify", id: placeholderId, value: withAcceptance(val ?? {}, placeholderId) });
+        placeholderId = undefined;
+        continue;
+      }
+      emitAdd(d, val);
       continue;
     }
 
