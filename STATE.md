@@ -24,17 +24,29 @@ Per SPEC-v0.2:
   1 legit warn on the refactor task).
 - Unified interface: `ser talk` — one conversation across all tools; the
   mapper requests harness commands via an `action` field (check/verify/
-  derive/run/status), the harness executes mechanically and reports (A28).
-- 149 hermetic tests; zero network; CI green.
+  derive/run/status/score), the harness executes mechanically and reports (A28).
+- Spec-authoring hardening pass (dogfood-driven, A32-A33 + below):
+  readiness SCORE the loop drives; autofill authors a thin spec to ready
+  ("build it anyway"); the harness OWNS ids/shapes (coerceRawDeltas accepts
+  the model's natural op-keyed output — the fix that made autofill work at
+  all); diagnostician advises only (mechanical floor blocks); autofill
+  fact-checks load-bearing claims with the adversarial lenses and surfaces
+  refutations. Validated by LIVE qwen runs, not just mocks.
+- 200 hermetic tests; zero network; CI green.
+
+## Live runs DONE
+1. Cross-executor gauntlet (glm/kimi/deepseek × 20 tasks, identical prompt):
+   ALL THREE 20/20 completed. Cost/mission: glm $0.0224, deepseek $0.0283,
+   kimi $0.1990. Strong pillar-3 evidence ("any cheap model" holds for >=3).
+   CSV: results/experiment-2026-06-13T04-53-02-721Z.csv.
 
 ## Live runs pending (human/key)
-1. Cross-executor gauntlet — RUNNING in background (glm/kimi/deepseek × 20
-   tasks; flawless through ~task 9 at last check). Results → RESULTS.md +
-   pillar-3 wording per SPEC-v0.2 §9.6.
 2. `pnpm derive-bench --tasks 1..20` — the planner tax (THE v0.2 bet).
 3. `pnpm poker-bench` — refusal quality.
-4. ser spec dogfood (success gate #4): write the v0.3 leaderboard spec with
-   `ser spec talk`.
+4. Cheap autofill plateaus ~45/100 on a RICH product spec (qwen diagnostician
+   keeps finding ~3 majors; 85 bar unreachable by cheap alone). Levers:
+   knight-escalate the fill/diagnostic last-mile, or tune READY_THRESHOLD.
+   Open decision for the human.
 
 ## Next
 TODOS.md #1: credential-free runtime (Trusty Squire injecting proxy —
