@@ -334,7 +334,12 @@ describe("self-knowledge composition (no architectural drift between prompts)", 
     // dogfood 2026-06-13: mapper must propose gates and not interrogate, and
     // must capture the stated goal instead of asking the user to repeat it
     expect(DELTA_MAPPER_PROMPT).toContain("PROPOSE gates; never interrogate");
-    expect(DELTA_MAPPER_PROMPT).toContain("NEVER ask the same question twice");
+    expect(DELTA_MAPPER_PROMPT).toContain("NEVER re-ask");
+    // raises the load-bearing forks (changes a gate/decision/feasibility) as
+    // blocking questions, and decomposes a product into capabilities
+    expect(DELTA_MAPPER_PROMPT).toContain("change a GATE, a DECISION, or a FEASIBILITY");
+    expect(DELTA_MAPPER_PROMPT).toContain("BLOCKING open_question");
+    expect(DELTA_MAPPER_PROMPT).toContain("decompose it into the CAPABILITIES");
     expect(DELTA_MAPPER_PROMPT.replace(/\s+/g, " ")).toContain("thesis modify value is ALWAYS a plain string");
     // unified interface: the mapper requests harness commands, never performs them
     expect(DELTA_MAPPER_PROMPT).toContain('setting "action"');
