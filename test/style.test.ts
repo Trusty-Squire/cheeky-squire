@@ -27,6 +27,16 @@ describe("colorsEnabled", () => {
     expect(colorsEnabled({}, true)).toBe(true);
     expect(colorsEnabled({}, false)).toBe(false);
   });
+  it("CLICOLOR_FORCE=1 forces on without a TTY (tmux/ssh)", () => {
+    expect(colorsEnabled({ CLICOLOR_FORCE: "1" }, false)).toBe(true);
+  });
+  it("an explicit override (--color/--no-color) wins over TTY detection", () => {
+    expect(colorsEnabled({}, false, true)).toBe(true); // --color on a non-TTY
+    expect(colorsEnabled({}, true, false)).toBe(false); // --no-color on a TTY
+  });
+  it("NO_COLOR still beats an explicit --color override", () => {
+    expect(colorsEnabled({ NO_COLOR: "1" }, true, true)).toBe(false);
+  });
 });
 
 describe("styleDeltaSummary", () => {

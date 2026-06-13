@@ -57,7 +57,7 @@ function printUsage(): void {
       "",
       "Usage:",
       "  ser login                 — store OPENROUTER_API_KEY in one place (~/.config/castellan/.env)",
-      "  ser talk [x.spec.yaml]    — the unified interface: talk; check/derive/run happen behind it (creates the spec if absent)",
+      "  ser talk [x.spec.yaml] [--color|--no-color]  — unified interface: talk; check/derive/run behind it (creates the spec if absent)",
       "  ser run <mission.yaml> [--mock] [--chain <name>] [--sandbox]",
       "  ser derive \"<goal>\" [--chain <name>] [--yes] [--out <file>]",
       "  ser trace <trace.jsonl>",
@@ -324,16 +324,21 @@ async function cmdTalk(args: string[]): Promise<number> {
   const { SpecSession } = await import("./contract/spec-session.js");
   const { dispatchAction, ensureSpecFile } = await import("./contract/talk.js");
 
+  // Color: --no-color forces off, --color forces on, else auto (TTY or
+  // FORCE_COLOR/CLICOLOR_FORCE). Auto-detection is unreliable under some
+  // tmux/SSH/phone setups, hence the explicit flag.
+  const colorOverride = flags.bool.has("no-color") ? false : flags.bool.has("color") ? true : undefined;
+  const { makeStyler, colorsEnabled, styleDeltaSummary } = await import("./style.js");
+  const st = makeStyler(colorsEnabled(process.env, Boolean(process.stdout.isTTY), colorOverride));
+
   const { path: specFile, created } = ensureSpecFile(process.cwd(), flags.positional[0]);
-  if (created) process.stdout.write(`new spec: ${specFile} — your first message pins the thesis.\n`);
+  if (created) process.stdout.write(st.gray(`new spec: ${specFile} — your first message pins the thesis.`) + "\n");
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser talk");
   const { OpenRouterClient } = await import("./llm/openrouter.js");
   const { chains, path: chainsPath } = resolveChains(process.cwd(), flags.value.get("chains"));
   const chainName = flags.value.get("chain") ?? "cheap";
   const chain = resolveChain(chains, chainName);
-  const { makeStyler, colorsEnabled, styleDeltaSummary } = await import("./style.js");
-  const st = makeStyler(colorsEnabled());
   const { BUILTIN_CHAINS_SOURCE } = await import("./contract/default-chains.js");
   if (chainsPath === BUILTIN_CHAINS_SOURCE) {
     process.stdout.write(st.gray(`chain: ${chainName} (built-in defaults — drop a chains.yaml here to customize)`) + "\n");

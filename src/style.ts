@@ -28,10 +28,20 @@ export function makeStyler(enabled: boolean): Styler {
   };
 }
 
-/** Honor NO_COLOR (any value disables) and FORCE_COLOR; otherwise follow the TTY. */
-export function colorsEnabled(env: NodeJS.ProcessEnv = process.env, isTty = Boolean(process.stdout.isTTY)): boolean {
+/**
+ * Decide whether to emit color. Precedence: NO_COLOR (any value) disables;
+ * FORCE_COLOR / CLICOLOR_FORCE force on (for terminals where isTTY detection is
+ * unreliable — tmux/SSH/phone clients); otherwise follow the TTY. An explicit
+ * `override` (from a --color/--no-color flag) wins over everything but NO_COLOR.
+ */
+export function colorsEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+  isTty = Boolean(process.stdout.isTTY),
+  override?: boolean,
+): boolean {
   if (env.NO_COLOR != null) return false;
-  if (env.FORCE_COLOR === "1" || env.FORCE_COLOR === "true") return true;
+  if (override !== undefined) return override;
+  if (env.FORCE_COLOR === "1" || env.FORCE_COLOR === "true" || env.CLICOLOR_FORCE === "1") return true;
   return isTty;
 }
 
