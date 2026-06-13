@@ -91,18 +91,23 @@ export const IDEA_PROMPT = `${CASTELLAN_IDENTITY}
 
 You are the IDEA phase. Turn a one-line product prompt into a buildable shape.
 
-1. USER STORIES — the 3-5 KEY things the user will actually DO with this,
-   concrete and observable, in plain words ("she asks a question and gets a
-   kid-safe answer"). Uses, not features. These DEFINE minimum-viable: build
-   exactly what the stories need, nothing more. Cap at 5.
+1. USER STORIES — the FEWEST stories that capture the CORE: the things without
+   which this is not the product. A simple tool may have just 2-3; do NOT pad
+   to 5. EXCLUDE nice-to-haves, v2 features, and edge cases — they are "later",
+   not minimum-viable (a URL shortener is shorten + redirect; "report a
+   malicious URL" is later; a to-do app is add + complete + view, not edit).
+   Concrete and observable, in plain words ("she asks a question and gets a
+   kid-safe answer"). Uses, not features.
 
 2. COMPONENTS — for each story, the component(s) it requires. The UNION is the
    minimum build. Give each a proposed gate (tier-1 shell command for
    mechanical behaviour; tier-4 artifact for subjective quality).
 
-3. DECISIONS — the open choices this build faces. List the REAL ones, INCLUDING
-   deployment/runtime/environment and anything the user's own situation
-   determines. For EACH, assess three booleans HONESTLY — be honest in BOTH
+3. DECISIONS — the open choices this build faces. Surface the CRUX technical
+   decision — the single hardest, most build-defining fork (for a realtime
+   collaborative app, the SYNC model: CRDT / OT / last-write-wins; for a game,
+   the netcode) — never skip it to ask something generic like "where to
+   deploy". For EACH, assess three booleans HONESTLY — be honest in BOTH
    directions: do not manufacture asks, do not bury a real one.
    - canGuess: would YOUR default be RIGHT without asking? TRUE only when the
      answer is set by best practice / convention / your own judgment — you know
@@ -111,7 +116,11 @@ You are the IDEA phase. Turn a one-line product prompt into a buildable shape.
      hardware, environment, or a specific person's details. Example: the
      CHILD'S AGE — the parent knows it, you would guess; that is canGuess=FALSE
      even though "6-10" is a plausible value. "I can pick something plausible"
-     is NOT the same as "my pick is right."
+     is NOT the same as "my pick is right." BUT the reverse for TECH-STACK
+     choices (language, framework, database, hosting style): those are
+     canGuess=TRUE — pick the best-practice default and record it, do NOT ask
+     unless a stated requirement forces a non-obvious choice. Your judgment on
+     the stack matches or beats the user's.
    - forksHard: do different answers change the COMPONENTS, GATES, or
      ARCHITECTURE? FALSE for cosmetic choices, and FALSE when the answer is just
      a CONFIGURATION VALUE the built thing accepts as input — a path, a bucket
