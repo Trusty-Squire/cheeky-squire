@@ -332,9 +332,11 @@ async function cmdTalk(args: string[]): Promise<number> {
   const { chains, path: chainsPath } = resolveChains(process.cwd(), flags.value.get("chains"));
   const chainName = flags.value.get("chain") ?? "cheap";
   const chain = resolveChain(chains, chainName);
+  const { makeStyler, colorsEnabled, styleDeltaSummary } = await import("./style.js");
+  const st = makeStyler(colorsEnabled());
   const { BUILTIN_CHAINS_SOURCE } = await import("./contract/default-chains.js");
   if (chainsPath === BUILTIN_CHAINS_SOURCE) {
-    process.stdout.write(`chain: ${chainName} (built-in defaults — drop a chains.yaml here to customize)\n`);
+    process.stdout.write(st.gray(`chain: ${chainName} (built-in defaults — drop a chains.yaml here to customize)`) + "\n");
   }
   const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
   const session = new SpecSession({
@@ -361,18 +363,21 @@ async function cmdTalk(args: string[]): Promise<number> {
       return executeMissionObject(mission, dirname(missionPath), runFlags, basename(missionPath).replace(/\.[^.]+$/, ""));
     },
   };
-  process.stdout.write("ser — talk normally; the notebook updates itself. 'undo' reverts, empty line exits.\n");
+  process.stdout.write(
+    st.bold("ser") + st.gray(" — talk normally; the notebook updates itself. ") +
+      st.gray("'undo' reverts, empty line exits.") + "\n",
+  );
   let undoStack: string[] = [];
   for (;;) {
-    const msg = (await ask("you> ")).trim();
+    const msg = (await ask(st.cyan(st.bold("you")) + st.gray("> "))).trim();
     if (!msg) return 0;
     if (msg === "undo") {
       const prev = undoStack.pop();
-      if (!prev) { process.stdout.write("  nothing to undo\n"); continue; }
+      if (!prev) { process.stdout.write(st.gray("  nothing to undo") + "\n"); continue; }
       const { writeFileSync: w } = await import("node:fs");
       w(session.path, prev);
       session.reject(); // repeated undos escalate the model
-      process.stdout.write(`  reverted (next turn on ${session.currentModel()})\n`);
+      process.stdout.write(st.yellow(`  reverted (next turn on ${session.currentModel()})`) + "\n");
       continue;
     }
     const before = readFileSync(session.path, "utf8");
@@ -384,25 +389,31 @@ async function cmdTalk(args: string[]): Promise<number> {
         if (applied.length > 0) {
           undoStack.push(before);
           if (undoStack.length > 20) undoStack = undoStack.slice(-20);
-          const summary = applied
-            .map((d) => `${d.op === "add" ? "+" : d.op === "remove" ? "-" : "~"}${d.section}${d.id ? ":" + d.id : ""}${d.drift ? "⚠drift" : ""}`)
-            .join(" ");
-          process.stdout.write(`  [spec ${summary}]\n`);
+          process.stdout.write(st.gray("  [spec ") + styleDeltaSummary(applied, st) + st.gray("]") + "\n");
         }
         for (const drop of dropped) {
-          process.stdout.write(`  [edit dropped (${drop.delta.section}${drop.delta.id ? ":" + drop.delta.id : ""}): ${drop.reason}]\n`);
+          process.stdout.write(
+            st.dim(st.red(`  [edit dropped (${drop.delta.section}${drop.delta.id ? ":" + drop.delta.id : ""}): ${drop.reason}]`)) + "\n",
+          );
         }
       }
       if (batch.action !== "none") {
         try {
           const lines = await dispatchAction(batch.action, batch.action_arg, actionCtx);
-          for (const line of lines) process.stdout.write(`${line}\n`);
+          for (const line of lines) {
+            const colored = /REFUTED|⚠|halted|cancelled|not buildable|not ready/i.test(line)
+              ? st.red(line)
+              : /READY|complete|every requirement|building\./i.test(line)
+                ? st.green(line)
+                : line;
+            process.stdout.write(`${colored}\n`);
+          }
         } catch (err) {
-          process.stdout.write(`  [${batch.action} failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);
+          process.stdout.write(st.dim(st.red(`  [${batch.action} failed: ${(err as Error).message.split("\n")[0]} — keep talking]`)) + "\n");
         }
       }
       // Self-diagnose every turn: score the spec and surface the single next
-      // decision/suggestion. The loop drives the score up until build-ready.
+      // decision/suggestion. Green when build-ready, yellow while blockers remain.
       let scored = false;
       try {
         const { scoreSpec, renderScoreLine } = await import("./contract/spec-score.js");
@@ -411,16 +422,16 @@ async function cmdTalk(args: string[]): Promise<number> {
           llm,
           model: chain.executor,
         });
-        process.stdout.write(`${renderScoreLine(s)}\n`);
+        process.stdout.write((s.ready ? st.green : st.yellow)(renderScoreLine(s)) + "\n");
         scored = true;
       } catch {
         // scoring is best-effort; never block the conversation on it
       }
       // The mapper's own question is a fallback only if scoring didn't surface one.
-      if (!scored && batch.question) process.stdout.write(`? ${batch.question}\n`);
+      if (!scored && batch.question) process.stdout.write(st.cyan(`? ${batch.question}`) + "\n");
     } catch (err) {
       // The conversation never dies for bookkeeping reasons.
-      process.stdout.write(`  [turn failed: ${(err as Error).message.split("\n")[0]} — keep talking]\n`);
+      process.stdout.write(st.dim(st.red(`  [turn failed: ${(err as Error).message.split("\n")[0]} — keep talking]`)) + "\n");
     }
   }
 }

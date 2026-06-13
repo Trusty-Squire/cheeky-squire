@@ -78,7 +78,9 @@ BuiltinEngine per SPEC §6.3 instead. Timebox: one focused
 pass. Decide, record, proceed. Do not stall.
 
 ## Scope fence (building any of this is drift — stop)
-- No TUI, no colors beyond plain status lines, no spinners
+- No full-screen/split-pane TUI yet (scheduled, desktop-focused). A
+  colorized line-based REPL IS allowed (src/style.ts; TTY-gated, NO_COLOR
+  honored) — approved by the owner 2026-06-13. Still no spinners.
 - No `squire watch`, no init wizard, no persona features
 - No Goose, no ACP, no MCP
 - No model ranking, probes, bandit routing, or voting
