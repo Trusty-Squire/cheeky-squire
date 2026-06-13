@@ -70,6 +70,56 @@ describe("autofillSpec", () => {
     expect(r.finalScore.improvements.some((i) => i.needsUser)).toBe(true);
   });
 
+  it("splitting a coarse requirement removes the original so it is not re-flagged", async () => {
+    // single coarse requirement (+scope so decomposition is the only mech gap)
+    writeFileSync(
+      specPath,
+      `thesis: "kids companion"\nscope_fence: ["offline only"]\nrequirements:\n  - id: R1\n    statement: "the whole companion"\n    acceptance: { tier: 1, gate: "node --test" }\n`,
+    );
+    const llm = new MockLlm([
+      diag([{ dimension: "decomposition", severity: "blocking", problem: "R1 is coarse", suggestion: "split + remove original", needsUser: false }]),
+      fill([
+        { section: "requirements", op: "add", value: { statement: "voice loop", acceptance: { tier: 1, gate: "node --test voice" } }, drift: false },
+        { section: "requirements", op: "add", value: { statement: "safety", acceptance: { tier: 4, artifact: "s.md" } }, drift: false },
+        { section: "requirements", op: "remove", id: "R1", drift: false },
+      ]),
+      diag([]),
+    ]);
+    const r = await autofillSpec(specPath, llm, "m");
+    expect(r.reachedReady).toBe(true);
+    const final = parseSpec(readFileSync(specPath, "utf8"), specPath);
+    expect(final.requirements.find((req) => req.id === "R1")).toBeUndefined(); // coarse original gone
+    expect(final.requirements).toHaveLength(2);
+  });
+
+  it("converges over two rounds: split lands ungated, a second round gates the pieces", async () => {
+    writeFileSync(
+      specPath,
+      `thesis: "kids companion"\nscope_fence: ["offline only"]\nrequirements:\n  - id: R1\n    statement: "the whole companion"\n    acceptance: { tier: 1, gate: "node --test" }\n`,
+    );
+    const llm = new MockLlm([
+      diag([{ dimension: "decomposition", severity: "blocking", problem: "R1 coarse", suggestion: "split", needsUser: false }]),
+      // round 1: pieces arrive WITHOUT gates (tier 0) — and remove the original
+      fill([
+        { section: "requirements", op: "add", value: { statement: "voice loop" }, drift: false },
+        { section: "requirements", op: "add", value: { statement: "safety" }, drift: false },
+        { section: "requirements", op: "remove", id: "R1", drift: false },
+      ]),
+      diag([]), // LLM happy, but mechanical anchoring (2 tier-0) keeps it not-ready
+      // round 2: gate the two pieces (now R2, R3)
+      fill([
+        { section: "requirements", op: "modify", id: "R2", value: { acceptance: { tier: 1, gate: "node --test voice" } }, drift: false },
+        { section: "requirements", op: "modify", id: "R3", value: { acceptance: { tier: 4, artifact: "s.md" } }, drift: false },
+      ]),
+      diag([]),
+    ]);
+    const r = await autofillSpec(specPath, llm, "m");
+    expect(r.reachedReady).toBe(true);
+    expect(r.rounds).toBe(2);
+    const final = parseSpec(readFileSync(specPath, "utf8"), specPath);
+    expect(final.requirements.every((req) => req.acceptance.tier >= 1)).toBe(true); // all gated
+  });
+
   it("bails out after maxRounds when each round gains nothing (no infinite loop)", async () => {
     // Always flags the same blocking gap; fill always adds a harmless minor edit
     // that never closes it — must stop on the stagnation/round cap, not spin.

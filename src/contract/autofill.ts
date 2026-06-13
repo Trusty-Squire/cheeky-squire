@@ -25,7 +25,12 @@ export const FILL_PROMPT = `${CASTELLAN_IDENTITY}
 You are improving a spec until it is BUILDABLE — decomposed, every requirement
 gated, blocking questions resolved, scope bounded. You are given the spec and
 its open gaps. Emit deltas that CLOSE as many gaps as you can in ONE pass:
-- split a coarse requirement into one requirement per capability, each gated.
+- split a coarse requirement into one requirement per capability. Each NEW
+  requirement must already carry a real gate (tier 1 command, or tier 4
+  artifact for subjective quality) — never leave it tier 0. CRUCIAL: also emit
+  a remove for the ORIGINAL coarse requirement, so it is not re-flagged next
+  round. (Omit ids on the new requirements; reference the original's id on the
+  remove.)
 - propose each gate from the ladder (tier-1 command for mechanical behaviour;
   tier-4 artifact for subjective quality, paired with tier-1 proxies).
 - resolve blocking questions.
