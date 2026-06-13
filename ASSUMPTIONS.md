@@ -131,6 +131,18 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   origin: "build it, report when done" — the sentence should work, mechanically.
 
 ## CLI
+- A34. Pipeline (idea→brief) — `ser idea "<p>"` runs the IDEA phase
+  (src/contract/ingest.ts): stories → components → decisions bucketed by the
+  3-test (bucketOf, code-owned). `ser plan "<p>" [out.spec.yaml]` adds the
+  DECISION BRIEF (src/contract/brief.ts): resolveBrief presents bucket-1 ASKs
+  (applyChoice: enter=accept, a/b/c=pick, s=skip, else=type) and AUTO-ACCEPTS
+  bucket-2 defaults but PRINTS them so a mis-bucket is catchable — the brief is
+  the backstop for imperfect auto-bucketing (the boundary is judgment-laden;
+  the human arbitrates). ideaToSpec compiles stories + components (→
+  requirements, gates normalized) + resolutions (→ decisions) into a ready
+  spec; stories are a first-class optional SpecSchema field. The driver takes
+  an injected BriefIO (hermetically testable). readChunk resolves empty on
+  sticky stdin EOF so piped/non-interactive briefs never deadlock.
 - A33. Autonomous spec authoring (src/contract/autofill.ts): when the user
   insists on building below the readiness score ("build it anyway" → mapper
   emits action=run, action_arg="auto"), ser stops asking and closes the gaps

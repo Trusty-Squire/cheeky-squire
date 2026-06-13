@@ -32,6 +32,8 @@ const idOf = (prefix: string) => z.string().regex(new RegExp(`^${prefix}\\d+$`),
 export const SpecSchema = z
   .object({
     thesis: z.string().min(1),
+    /** The key user stories the build serves — the unit of "minimum viable". */
+    stories: z.array(z.string().min(1)).default([]),
     scope_fence: z.array(z.string().min(1)).default([]),
     requirements: z
       .array(

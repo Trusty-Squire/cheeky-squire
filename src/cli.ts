@@ -40,6 +40,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdLogin(rest);
     case "idea":
       return cmdIdea(rest);
+    case "plan":
+      return cmdPlan(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -496,6 +498,53 @@ async function cmdIdea(args: string[]): Promise<number> {
   return 0;
 }
 
+/**
+ * `ser plan "<prompt>" [out.spec.yaml]` — pipeline slices 1+2: the idea phase
+ * decomposes the prompt into stories + components + bucketed decisions, the
+ * decision brief resolves the asks with you (accept/pick/type/skip) and shows
+ * the defaults, and the result compiles into a spec ready to derive.
+ */
+async function cmdPlan(args: string[]): Promise<number> {
+  const flags = parseFlags(args, ["chain", "chains"]);
+  const prompt = flags.positional[0];
+  if (!prompt) throw new SquireError("USAGE", 'ser plan "<product prompt>" [out.spec.yaml]');
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser plan");
+  const { OpenRouterClient } = await import("./llm/openrouter.js");
+  const { loadChainsForDerive } = await import("./contract/derive.js");
+  const chain = resolveChain(loadChainsForDerive(process.cwd(), flags.value.get("chains")), flags.value.get("chain") ?? "cheap");
+  const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
+  const { makeStyler, colorsEnabled } = await import("./style.js");
+  const st = makeStyler(colorsEnabled(process.env, Boolean(process.stdout.isTTY), flags.bool.has("no-color") ? false : flags.bool.has("color") ? true : undefined));
+
+  const { extractIdea } = await import("./contract/ingest.js");
+  const { resolveBrief, ideaToSpec } = await import("./contract/brief.js");
+  const { stringify } = await import("yaml");
+
+  process.stdout.write(st.gray("thinking through the stories and components…") + "\n");
+  const idea = await extractIdea(prompt, llm, chain.executor);
+  process.stdout.write("\n" + st.bold("Stories (minimum viable):") + "\n");
+  idea.stories.forEach((s, i) => process.stdout.write(`  ${i + 1}. ${s}\n`));
+  process.stdout.write("\n" + st.bold("Components:") + "\n");
+  for (const c of idea.components) process.stdout.write(`  ${st.green("[t" + c.gate.tier + "]")} ${c.statement}\n`);
+  process.stdout.write("\n");
+
+  const io = { print: (l: string) => process.stdout.write(l + "\n"), ask };
+  const resolutions = await resolveBrief(idea.decisions, io, st);
+
+  const spec = ideaToSpec(prompt, idea, resolutions);
+  const out = resolve(flags.positional[1] ?? `${basename(prompt).replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 32).replace(/^-|-$/g, "") || "product"}.spec.yaml`);
+  const { writeFileSync: wf } = await import("node:fs");
+  wf(out, stringify(spec));
+
+  const { scoreSpec, renderScoreLine } = await import("./contract/spec-score.js");
+  const s = await scoreSpec(spec);
+  process.stdout.write("\n" + st.gray(`spec written: ${out}`) + "\n");
+  process.stdout.write((s.ready ? st.green : st.yellow)(renderScoreLine(s)) + "\n");
+  process.stdout.write(st.gray(`refine: ser talk ${basename(out)}   ·   build: ser derive ${basename(out)}`) + "\n");
+  return 0;
+}
+
 async function cmdTrace(args: string[]): Promise<number> {
   const flags = parseFlags(args, []);
   const path = flags.positional[0];
@@ -559,14 +608,24 @@ function promptAdjudicator(workdir: string): import("./harness/gates.js").Adjudi
   };
 }
 
+let stdinEnded = false;
 function readChunk(): Promise<string> {
+  // Once stdin has ended (piped input exhausted, or Ctrl-D), every further read
+  // resolves empty immediately — 'end' only fires once, so without this a brief
+  // with more asks than input lines would deadlock and never write its spec.
+  if (stdinEnded) return Promise.resolve("");
   return new Promise((resolveP) => {
     process.stdin.resume();
     process.stdin.setEncoding("utf8");
-    process.stdin.once("data", (d) => {
+    const onData = (d: Buffer | string): void => { cleanup(); resolveP(String(d)); };
+    const onEnd = (): void => { stdinEnded = true; cleanup(); resolveP(""); };
+    const cleanup = (): void => {
       process.stdin.pause();
-      resolveP(String(d));
-    });
+      process.stdin.off("data", onData);
+      process.stdin.off("end", onEnd);
+    };
+    process.stdin.once("data", onData);
+    process.stdin.once("end", onEnd);
   });
 }
 
