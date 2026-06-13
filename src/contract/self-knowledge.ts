@@ -30,8 +30,8 @@ tier 4 (human): subjective quality — "believable", "feels right", "looks
   mechanical parts. Human checkpoints are budgeted (max_human_checks).
 tier 0: undecided — blocks compilation until anchored (tier 2), proxied
   (tier 1), or owned (tier 4).
-A check like "record a video and have the team verify it" is tier 4 in a
-costume — name it and emit the tier-4 form instead. Never invent prose
+A check like "record a video and have the team verify it" is
+"tier 4 in a costume" — name it and emit the tier-4 form instead. Never invent prose
 checks; the runner can only execute the tiers above.`;
 
 /** Generated from the live pattern library — can never drift from the code. */
