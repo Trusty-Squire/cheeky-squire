@@ -38,6 +38,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdTalk(rest);
     case "login":
       return cmdLogin(rest);
+    case "idea":
+      return cmdIdea(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -470,6 +472,27 @@ async function cmdLogin(args: string[]): Promise<number> {
     `${migrating ? "consolidated" : "saved"} OPENROUTER_API_KEY (${masked}) to ${target} [mode 600]\n` +
       `ser reads it from here in every directory — you can delete scattered .env keys now.\n`,
   );
+  return 0;
+}
+
+/**
+ * `ser idea "<prompt>"` — pipeline slice 1 (idea phase) in isolation: stories,
+ * components (minimum viable), and decisions bucketed ask/default/silent. A
+ * validation surface for the story-extraction + bucket-tagging before any UI.
+ */
+async function cmdIdea(args: string[]): Promise<number> {
+  const flags = parseFlags(args, ["chain", "chains"]);
+  const prompt = flags.positional[0];
+  if (!prompt) throw new SquireError("USAGE", 'ser idea "<product prompt>"');
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new SquireError("NO_API_KEY", "OPENROUTER_API_KEY required for ser idea");
+  const { OpenRouterClient } = await import("./llm/openrouter.js");
+  const { loadChainsForDerive } = await import("./contract/derive.js");
+  const chain = resolveChain(loadChainsForDerive(process.cwd(), flags.value.get("chains")), flags.value.get("chain") ?? "cheap");
+  const llm = new OpenRouterClient({ apiKey, baseUrl: process.env.OPENROUTER_BASE_URL });
+  const { extractIdea, renderIdea } = await import("./contract/ingest.js");
+  const r = await extractIdea(prompt, llm, chain.executor);
+  process.stdout.write(renderIdea(r).join("\n") + "\n");
   return 0;
 }
 
