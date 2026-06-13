@@ -33,61 +33,72 @@ beforeEach(() => {
   writeFileSync(specPath, cleanSpec);
 });
 
+// Readiness = gate coverage. The loop only runs when there's a real BLOCKER:
+// an ungated requirement, a blocking question, or a refuted claim.
+const ungatedSpec = `thesis: "kids companion"
+scope_fence: ["offline only"]
+requirements:
+  - id: R1
+    statement: "the companion"
+    acceptance: { tier: 0 }
+`;
+const blockingQSpec = `thesis: "kids companion"
+scope_fence: ["offline only"]
+requirements:
+  - id: R1
+    statement: "voice loop"
+    acceptance: { tier: 1, gate: "node --test" }
+open_questions:
+  - { id: Q1, text: "hardware?", blocking: true }
+`;
+
 describe("autofillSpec", () => {
-  // Two major gaps (-30) put a mechanically-clean spec below the 85 bar; the
-  // model can no longer mark anything "blocking" (clamped to major in code).
-  it("closes model-flagged gaps and reaches build-ready", async () => {
+  it("gates an ungated requirement and reaches build-ready", async () => {
+    writeFileSync(specPath, ungatedSpec);
     const llm = new MockLlm([
-      diag([
-        { dimension: "gate-strength", severity: "major", problem: "R1 gate passes on a stub", suggestion: "assert varied inputs", needsUser: false },
-        { dimension: "coverage", severity: "major", problem: "no error-path requirement", suggestion: "add one", needsUser: false },
-      ]),
-      fill([{ section: "requirements", op: "modify", id: "R1", value: { id: "R1", statement: "voice loop", acceptance: { tier: 1, gate: "node --test loop --varied" } }, drift: false }]),
-      diag([]), // gaps closed
+      diag([]), // the blocker is mechanical: R1 has no gate
+      fill([{ section: "requirements", op: "modify", id: "R1", value: { acceptance: { tier: 1, gate: "node --test loop --varied" } }, drift: false }]),
+      diag([]),
     ]);
     const r = await autofillSpec(specPath, llm, "m");
     expect(r.reachedReady).toBe(true);
-    expect(r.applied.length).toBeGreaterThan(0);
     expect(r.rounds).toBe(1);
     expect(readFileSync(specPath, "utf8")).toContain("--varied");
   });
 
-  it("defaults a genuine fork and records it as a visible 'ser default:' decision", async () => {
+  it("defaults a genuine fork (de-blocks the question) and records a 'ser default:' decision", async () => {
+    writeFileSync(specPath, blockingQSpec);
     const llm = new MockLlm([
-      diag([
-        { dimension: "hardware", severity: "major", problem: "no target runtime", suggestion: "pick a platform", needsUser: true },
-        { dimension: "persistence", severity: "major", problem: "no persistence requirement", suggestion: "add one", needsUser: false },
-      ]),
-      fill([{ section: "decisions", op: "add", value: { id: "D1", statement: "ser default: target an offline phone app", rationale: "most accessible for a parent", claims: [] }, drift: false }]),
+      diag([]), // mechanical blocker: Q1 is blocking
+      fill([{ section: "decisions", op: "add", value: { statement: "ser default: target an offline phone app", rationale: "accessible", claims: [] }, drift: false }]),
       diag([]),
     ]);
     const r = await autofillSpec(specPath, llm, "m");
+    expect(r.reachedReady).toBe(true); // the question is de-blocked
     expect(r.defaults.some((d) => /ser default: target an offline phone/.test(d))).toBe(true);
-    expect(parseSpec(readFileSync(specPath, "utf8"), specPath).decisions[0]!.statement).toContain("ser default");
+    expect(parseSpec(readFileSync(specPath, "utf8"), specPath).open_questions.every((q) => !q.blocking)).toBe(true);
   });
 
-  it("stops (not ready) when the model can produce no fix — surfaces to the user", async () => {
+  it("stops (not ready) when the model cannot gate the blocker — surfaces it", async () => {
+    writeFileSync(specPath, ungatedSpec);
     const llm = new MockLlm([
-      diag([
-        { dimension: "hardware", severity: "major", problem: "unresolvable fork", suggestion: "?", needsUser: true },
-        { dimension: "scope", severity: "major", problem: "scope undefined", suggestion: "?", needsUser: true },
-      ]),
-      fill([]), // no deltas — cannot make progress
+      diag([]),
+      fill([]), // no deltas — can't gate R1
     ]);
     const r = await autofillSpec(specPath, llm, "m");
     expect(r.reachedReady).toBe(false);
     expect(r.rounds).toBe(0);
-    expect(r.finalScore.improvements.some((i) => i.needsUser)).toBe(true);
+    expect(r.finalScore.improvements.some((i) => i.severity === "blocking")).toBe(true);
   });
 
   it("splitting a coarse requirement removes the original so it is not re-flagged", async () => {
-    // single coarse requirement (+scope so decomposition is the only mech gap)
+    // coarse requirement + a blocking question to drive the loop
     writeFileSync(
       specPath,
-      `thesis: "kids companion"\nscope_fence: ["offline only"]\nrequirements:\n  - id: R1\n    statement: "the whole companion"\n    acceptance: { tier: 1, gate: "node --test" }\n`,
+      `thesis: "kids companion"\nscope_fence: ["offline only"]\nrequirements:\n  - id: R1\n    statement: "the whole companion"\n    acceptance: { tier: 1, gate: "node --test" }\nopen_questions:\n  - { id: Q1, text: "scope?", blocking: true }\n`,
     );
     const llm = new MockLlm([
-      diag([{ dimension: "decomposition", severity: "blocking", problem: "R1 is coarse", suggestion: "split + remove original", needsUser: false }]),
+      diag([{ dimension: "decomposition", severity: "minor", problem: "R1 is coarse", suggestion: "split + remove original", needsUser: false }]),
       fill([
         { section: "requirements", op: "add", value: { statement: "voice loop", acceptance: { tier: 1, gate: "node --test voice" } }, drift: false },
         { section: "requirements", op: "add", value: { statement: "safety", acceptance: { tier: 4, artifact: "s.md" } }, drift: false },
@@ -102,20 +113,19 @@ describe("autofillSpec", () => {
     expect(final.requirements).toHaveLength(2);
   });
 
-  it("converges over two rounds: split lands ungated, a second round gates the pieces", async () => {
-    writeFileSync(
-      specPath,
-      `thesis: "kids companion"\nscope_fence: ["offline only"]\nrequirements:\n  - id: R1\n    statement: "the whole companion"\n    acceptance: { tier: 1, gate: "node --test" }\n`,
-    );
+  it("converges over two rounds: split lands ungated (blockers), a second round gates them", async () => {
+    // start ungated → blocker; round 1 splits into ungated pieces (still
+    // blockers); round 2 gates them → ready.
+    writeFileSync(specPath, ungatedSpec);
     const llm = new MockLlm([
-      diag([{ dimension: "decomposition", severity: "blocking", problem: "R1 coarse", suggestion: "split", needsUser: false }]),
+      diag([]),
       // round 1: pieces arrive WITHOUT gates (tier 0) — and remove the original
       fill([
         { section: "requirements", op: "add", value: { statement: "voice loop" }, drift: false },
         { section: "requirements", op: "add", value: { statement: "safety" }, drift: false },
         { section: "requirements", op: "remove", id: "R1", drift: false },
       ]),
-      diag([]), // LLM happy, but mechanical anchoring (2 tier-0) keeps it not-ready
+      diag([]), // mechanical anchoring (2 tier-0) keeps it not-ready
       // round 2: gate the two pieces (now R2, R3)
       fill([
         { section: "requirements", op: "modify", id: "R2", value: { acceptance: { tier: 1, gate: "node --test voice" } }, drift: false },
@@ -188,8 +198,9 @@ open_questions:
   });
 
   it("bails out after maxRounds when each round gains nothing (no infinite loop)", async () => {
-    // Always flags the same blocking gap; fill always adds a harmless minor edit
-    // that never closes it — must stop on the stagnation/round cap, not spin.
+    // R1 stays ungated (the blocker); fill only ever adds a harmless scope note
+    // and never gates it — must stop on stagnation/round cap, not spin.
+    writeFileSync(specPath, ungatedSpec);
     const llm = new MockLlm([
       ((call: { system: string }) =>
         call.system.includes('{"deltas"') // the fill prompt asks for deltas; the diagnostic for improvements

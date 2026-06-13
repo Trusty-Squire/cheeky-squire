@@ -97,7 +97,7 @@ describe("scoreSpec (mechanical-only, offline)", () => {
 });
 
 describe("scoreSpec (with the LLM diagnostician)", () => {
-  it("merges model-proposed gaps and never lets them inflate the score", async () => {
+  it("model gaps are ADVISORY — they lower polish but never block readiness", async () => {
     const llm = new MockLlm([
       {
         text: JSON.stringify({
@@ -110,8 +110,11 @@ describe("scoreSpec (with the LLM diagnostician)", () => {
     ]);
     const s = await scoreSpec(parseSpec(mature), { llm, model: "m" });
     expect(s.improvements.some((i) => i.dimension === "gate-strength")).toBe(true);
-    expect(s.improvements.some((i) => i.needsUser)).toBe(true);
-    expect(s.ready).toBe(false); // the blocking model gap pulls it back below ready
+    // a mechanically-complete spec is READY even with model suggestions; the
+    // model's "blocking" is clamped to major and never gates (gate coverage is
+    // the bar, not the diagnostician's perfectionism).
+    expect(s.ready).toBe(true);
+    expect(s.score).toBeLessThan(100); // but polish reflects the suggestions
   });
 
   it("malformed diagnostician output degrades to the mechanical floor", async () => {
@@ -122,11 +125,12 @@ describe("scoreSpec (with the LLM diagnostician)", () => {
 });
 
 describe("renderScoreLine", () => {
-  it("ready specs show the bar only", () => {
-    expect(renderScoreLine({ score: 92, ready: true, improvements: [] })).toBe("spec score: 92/100 — READY to build");
+  it("ready specs lead with build-readiness (gate coverage)", () => {
+    expect(renderScoreLine({ score: 92, ready: true, improvements: [] })).toContain("READY to build");
+    expect(renderScoreLine({ score: 92, ready: true, improvements: [] })).toContain("every requirement gated");
   });
 
-  it("surfaces the worst gap, labelled decision vs suggestion", () => {
+  it("not-ready leads with the blocker count and the next blocker", () => {
     const line = renderScoreLine({
       score: 55,
       ready: false,
@@ -134,8 +138,8 @@ describe("renderScoreLine", () => {
         { dimension: "hardware", severity: "blocking", problem: "no runtime", suggestion: "pick one", needsUser: true },
       ],
     });
-    expect(line).toContain("55/100");
-    expect(line).toContain("next decision");
+    expect(line).toContain("NOT ready");
+    expect(line).toContain("1 blocker");
     expect(line).toContain("no runtime");
   });
 });

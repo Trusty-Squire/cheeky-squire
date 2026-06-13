@@ -142,18 +142,20 @@ Decisions made where SPEC.md is silent. SPEC.md wins on conflict.
   and can undo; the spend confirmation is the human checkpoint. If autofill
   cannot reach ready, the remaining needsUser decisions are surfaced and the
   build stops. Without "auto", run still surfaces the gaps (A32).
-- A32. Spec readiness is a SCORE the loop drives, not a one-time gate
-  (src/contract/spec-score.ts). Every talk turn self-diagnoses and prints
-  `spec score N/100` + the single next gap. The NUMBER is mechanical (fixed
-  severity weights: blocking 40, major 15, minor 5; READY_THRESHOLD 85; any
-  blocking gap caps ready=false) over objective facts — unanchored reqs,
-  blocking questions, unverified/refuted claims, single-requirement coarseness,
-  empty scope fence. The cheap LLM only DIAGNOSES (proposes improvements +
-  tags severity, needsUser true only for genuine forks); it cannot inflate the
-  number (honors "model never grades its own homework"). `ser talk`'s run
-  REFUSES below threshold and lists the gaps; `ser spec score <file>` is the
-  standalone readout (mechanical-only without a key). Weights/threshold are
-  v0.2 defaults, tunable.
+- A32. Spec READINESS is structural gate coverage, NOT a score threshold
+  (src/contract/spec-score.ts). A spec is buildable when every requirement has
+  an eval gate (tier >=1), no decision rests on a REFUTED claim, and no open
+  question is blocking — i.e. ZERO blocking gaps. That is the only readiness
+  bar (gates judge at run time; the spec needn't be perfect, only verifiable).
+  The polish SCORE (0-100, weights blocking 40 / major 15 / minor 5) is a
+  secondary display signal; the LLM diagnostician's major/minor suggestions
+  (decomposition, gate strength, missing capabilities, unverified claims)
+  lower polish but NEVER block readiness — the model advises, only the
+  mechanical floor blocks (clamped in code; honors "model never grades its own
+  homework"). Rationale (user, 2026-06-13): "shouldn't the spec be complete if
+  there are eval gates to every component?" — yes; LLM perfectionism never
+  converges, gate coverage does. `ser talk` run surfaces blockers (or autofills
+  on "build it anyway"); `ser spec score <file>` is the standalone readout.
 - A30. ser runs anywhere with no config: chains resolve via one
   resolveChains() — explicit --chains, cwd, workdir, global
   ~/.config/castellan/chains.yaml, then BUILT-IN defaults (src/contract/

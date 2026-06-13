@@ -7,7 +7,7 @@ import { parseMission } from "./schema.js";
 import { parseSpec, unverifiedLoadBearing } from "./spec.js";
 import { checkSpec, verifyClaim, type DeltaBatch } from "./spec-session.js";
 import { deriveV2 } from "./derive2.js";
-import { scoreSpec, renderScoreLine, READY_THRESHOLD } from "./spec-score.js";
+import { scoreSpec, renderScoreLine } from "./spec-score.js";
 import { autofillSpec } from "./autofill.js";
 
 /**
@@ -156,34 +156,33 @@ export async function dispatchAction(
         model: ctx.executorModel,
       });
       if (!s.ready && !force) {
+        const blockers = s.improvements.filter((i) => i.severity === "blocking");
         lines.push(
-          `not building yet — spec score ${s.score}/100 (need ${READY_THRESHOLD}). Close these first, ` +
-            `or say "build it anyway" and I'll fill them myself:`,
+          `not building yet — ${blockers.length} requirement(s)/decision(s) not buildable (need an eval gate, ` +
+            `a resolved question, or a feasible claim). Close these, or say "build it anyway" and I'll fill them:`,
         );
-        for (const imp of s.improvements.slice(0, 4)) {
+        for (const imp of blockers.slice(0, 4)) {
           const lead = imp.needsUser ? "decide" : "ser can do";
-          lines.push(`  [${imp.severity}/${imp.dimension}, ${lead}] ${imp.problem}\n    → ${imp.suggestion}`);
+          lines.push(`  [${imp.dimension}, ${lead}] ${imp.problem}\n    → ${imp.suggestion}`);
         }
         return lines;
       }
       if (!s.ready && force) {
-        lines.push(`spec at ${s.score}/100 — filling the gaps myself...`);
+        lines.push(`spec not buildable yet — filling the gaps myself...`);
         const r = await autofillSpec(ctx.specPath, ctx.llm, ctx.executorModel);
-        lines.push(`autofilled ${r.applied.length} edit(s) over ${r.rounds} round(s) → ${r.finalScore.score}/100`);
+        lines.push(`autofilled ${r.applied.length} edit(s) over ${r.rounds} round(s)`);
         for (const def of r.defaults) lines.push(`  ${def} (undo to change)`);
         for (const ref of r.refutedClaims) lines.push(`  ⚠ feasibility REFUTED — ${ref.id}: ${ref.evidence}`);
         s = r.finalScore;
         if (!s.ready) {
-          lines.push(`still ${s.score}/100 — these are genuine decisions only you can make:`);
-          for (const imp of s.improvements.filter((i) => i.needsUser).slice(0, 3)) {
-            lines.push(`  [decide] ${imp.problem}\n    → ${imp.suggestion}`);
-          }
-          if (!s.improvements.some((i) => i.needsUser)) {
-            for (const imp of s.improvements.slice(0, 3)) lines.push(`  [${imp.severity}] ${imp.problem}`);
+          const blockers = s.improvements.filter((i) => i.severity === "blocking");
+          lines.push(`still not buildable — ${blockers.length} blocker(s) need you:`);
+          for (const imp of blockers.slice(0, 4)) {
+            lines.push(`  [${imp.needsUser ? "decide" : imp.dimension}] ${imp.problem}\n    → ${imp.suggestion}`);
           }
           return lines;
         }
-        lines.push(`now ${s.score}/100 — building.`);
+        lines.push(`every requirement now gated — building.`);
       }
       let mp = missionPathFor(ctx.specPath);
       const stale = !existsSync(mp) || statSync(mp).mtimeMs < statSync(ctx.specPath).mtimeMs;

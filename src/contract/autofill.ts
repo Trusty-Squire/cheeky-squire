@@ -5,7 +5,7 @@ import type { LlmClient } from "../llm/types.js";
 import { parseSpec, type Spec } from "./spec.js";
 import { DeltaSchema, normalizeDeltas, applyDeltasLenient, coerceRawDeltas, verifyClaim, type Delta } from "./spec-session.js";
 import { unverifiedLoadBearing } from "./spec.js";
-import { scoreSpec, READY_THRESHOLD, type SpecScore, type Improvement } from "./spec-score.js";
+import { scoreSpec, type SpecScore, type Improvement } from "./spec-score.js";
 import { tryParseJson } from "./derive.js";
 import { CASTELLAN_IDENTITY, GATE_LADDER_DOC, SPEC_ITEM_SHAPES } from "./self-knowledge.js";
 
@@ -120,10 +120,9 @@ export async function autofillSpec(
   specPath: string,
   llm: LlmClient,
   model: string,
-  opts?: { maxRounds?: number; threshold?: number },
+  opts?: { maxRounds?: number },
 ): Promise<AutofillResult> {
   const maxRounds = opts?.maxRounds ?? 6;
-  const threshold = opts?.threshold ?? READY_THRESHOLD;
   const applied: Delta[] = [];
   const defaults: string[] = [];
   const refutedClaims: { id: string; evidence: string }[] = [];
@@ -131,7 +130,9 @@ export async function autofillSpec(
   let stagnant = 0;
   let score = await scoreSpec(parseSpec(readFileSync(specPath, "utf8"), specPath), { llm, model });
 
-  while (rounds < maxRounds && !score.ready && score.score < threshold) {
+  // Loop until the spec is READY (every requirement gated, no refuted claim,
+  // no blocker) — not until a polish threshold. Gate coverage is completeness.
+  while (rounds < maxRounds && !score.ready) {
     if (score.improvements.length === 0) break;
     const spec = parseSpec(readFileSync(specPath, "utf8"), specPath);
     const raw = normalizeDeltas(spec, await generateFill(spec, score.improvements, llm, model));

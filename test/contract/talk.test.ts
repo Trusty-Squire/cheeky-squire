@@ -145,7 +145,7 @@ describe("dispatchAction (mechanical, no LLM unless the action needs one)", () =
     expect(executed).toBe(false);
     const txt = lines.join("\n");
     expect(txt).toContain("not building yet");
-    expect(txt).toContain("score");
+    expect(txt).toContain("not buildable");
     expect(txt).toContain("R1 has no objective check"); // the blocking gap is surfaced
   });
 

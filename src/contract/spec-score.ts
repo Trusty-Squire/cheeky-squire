@@ -106,26 +106,31 @@ export function mechanicalImprovements(spec: Spec): Improvement[] {
   for (const q of blockingQuestions(spec)) {
     out.push({
       dimension: "decided",
-      severity: "major",
+      severity: "blocking", // an unanswered blocker is, by definition, blocking
       problem: `open question ${q} is blocking`,
       suggestion: `resolve ${q} — propose an answer or ask the user if it is a real fork`,
       needsUser: false,
     });
   }
+  // Unverified load-bearing claims are ADVISORY (verify when you want the
+  // assurance) — only a REFUTED claim blocks, above. Gate coverage, not
+  // verification status, is the completeness bar.
   for (const { decision, claim } of unverifiedLoadBearing(spec)) {
     out.push({
       dimension: "claims",
-      severity: "major",
+      severity: "minor",
       problem: `decision ${decision} rests on unverified claim ${claim}`,
       suggestion: `verify ${claim} (ser runs the adversarial lenses)`,
       needsUser: false,
     });
   }
+  // Decomposition is a quality SUGGESTION, not a completeness blocker — a
+  // single gated requirement is still buildable (its gate judges it).
   if (spec.requirements.length < 2) {
     out.push({
       dimension: "decomposition",
-      severity: "major",
-      problem: "the whole product is one requirement — too coarse to gate meaningfully",
+      severity: "minor",
+      problem: "the whole product is one requirement — consider splitting per capability",
       suggestion: "split it into one requirement per capability, each with its own gate",
       needsUser: false,
     });
@@ -158,12 +163,19 @@ function mergeImprovements(mech: Improvement[], model: Improvement[]): Improveme
   return all.sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]);
 }
 
-/** Compute the score from the improvement list. Code owns the arithmetic. */
+/**
+ * Compute readiness + a polish score. READINESS is structural: a spec is
+ * buildable when every component has an eval gate and nothing blocks —
+ * i.e. NO blocking gaps (ungated requirement, refuted decision, blocking
+ * question). The LLM's major/minor suggestions refine the polish SCORE but
+ * never gate readiness (gates judge at run time; the spec needn't be perfect,
+ * only verifiable). Code owns the arithmetic.
+ */
 export function scoreFromImprovements(improvements: Improvement[]): SpecScore {
   const penalty = improvements.reduce((sum, i) => sum + SEVERITY_WEIGHT[i.severity], 0);
   const score = Math.max(0, 100 - penalty);
-  const hasBlocking = improvements.some((i) => i.severity === "blocking");
-  return { score, ready: score >= READY_THRESHOLD && !hasBlocking, improvements };
+  const ready = !improvements.some((i) => i.severity === "blocking");
+  return { score, ready, improvements };
 }
 
 /**
@@ -206,16 +218,18 @@ export async function scoreSpec(
   return scoreFromImprovements(mergeImprovements(mech, model));
 }
 
-/** One-line bar + the single next decision to surface, for the talk loop. */
+/**
+ * Readiness-first one-liner for the talk loop. Leads with whether the spec is
+ * BUILDABLE (every component gated, nothing blocking) — the real bar — then
+ * surfaces the next blocker, or, once ready, the count of optional suggestions.
+ */
 export function renderScoreLine(s: SpecScore): string {
-  if (s.ready || s.improvements.length === 0) {
-    return `spec score: ${s.score}/100${s.ready ? " — READY to build" : ""}`;
+  const blockers = s.improvements.filter((i) => i.severity === "blocking");
+  if (s.ready) {
+    const suggestions = s.improvements.length;
+    return `spec: READY to build — every requirement gated (polish ${s.score}/100${suggestions ? `, ${suggestions} optional suggestion(s)` : ""})`;
   }
-  // At low scores many blocking gaps all floor to 0, hiding progress — show the
-  // gap count so the loop's movement (gaps closing) is visible turn to turn.
-  const blocking = s.improvements.filter((i) => i.severity === "blocking").length;
-  const tally = `${s.improvements.length} gap(s)${blocking ? `, ${blocking} blocking` : ""}`;
-  const top = s.improvements[0]!;
-  const lead = top.needsUser ? "decision" : "suggestion";
-  return `spec score: ${s.score}/100 (${tally})\n  next ${lead} [${top.severity}/${top.dimension}]: ${top.problem}\n    → ${top.suggestion}`;
+  const top = blockers[0]!;
+  const lead = top.needsUser ? "decision" : "ser can do";
+  return `spec: NOT ready — ${blockers.length} blocker(s) (polish ${s.score}/100)\n  next [${top.dimension}, ${lead}]: ${top.problem}\n    → ${top.suggestion}`;
 }
