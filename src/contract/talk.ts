@@ -171,6 +171,7 @@ export async function dispatchAction(
         const r = await autofillSpec(ctx.specPath, ctx.llm, ctx.executorModel);
         lines.push(`autofilled ${r.applied.length} edit(s) over ${r.rounds} round(s) → ${r.finalScore.score}/100`);
         for (const def of r.defaults) lines.push(`  ${def} (undo to change)`);
+        for (const ref of r.refutedClaims) lines.push(`  ⚠ feasibility REFUTED — ${ref.id}: ${ref.evidence}`);
         s = r.finalScore;
         if (!s.ready) {
           lines.push(`still ${s.score}/100 — these are genuine decisions only you can make:`);

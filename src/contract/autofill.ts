@@ -3,7 +3,8 @@ import { stringify as yamlStringify } from "yaml";
 import { z } from "zod";
 import type { LlmClient } from "../llm/types.js";
 import { parseSpec, type Spec } from "./spec.js";
-import { DeltaSchema, normalizeDeltas, applyDeltasLenient, type Delta } from "./spec-session.js";
+import { DeltaSchema, normalizeDeltas, applyDeltasLenient, coerceRawDeltas, verifyClaim, type Delta } from "./spec-session.js";
+import { unverifiedLoadBearing } from "./spec.js";
 import { scoreSpec, READY_THRESHOLD, type SpecScore, type Improvement } from "./spec-score.js";
 import { tryParseJson } from "./derive.js";
 import { CASTELLAN_IDENTITY, GATE_LADDER_DOC, SPEC_ITEM_SHAPES } from "./self-knowledge.js";
@@ -33,7 +34,9 @@ its open gaps. Emit deltas that CLOSE as many gaps as you can in ONE pass:
   remove.)
 - propose each gate from the ladder (tier-1 command for mechanical behaviour;
   tier-4 artifact for subjective quality, paired with tier-1 proxies).
-- resolve blocking questions.
+- RESOLVE blocking questions. You are autofilling — you DECIDE, you do not ask.
+  NEVER add a new blocking open_question. If something is genuinely undecided,
+  make a "ser default: ..." decision instead, never a blocker.
 For a gap marked NEEDS-DECISION (a genuine product fork), choose the most
 sensible DEFAULT and record it as a decision whose statement begins
 "ser default: " so the user sees and can override it. When asked to autofill,
@@ -51,7 +54,37 @@ export interface AutofillResult {
   applied: Delta[];
   /** Human-readable "ser default: ..." notes for the forks ser defaulted. */
   defaults: string[];
+  /** Claims the adversarial lenses REFUTED — real feasibility findings for the user. */
+  refutedClaims: { id: string; evidence: string }[];
   reachedReady: boolean;
+}
+
+/**
+ * Fact-check the load-bearing claims autofill introduced — the planning hour.
+ * Runs the adversarial lenses on each unverified load-bearing claim (bounded
+ * per round). A survived claim clears its gap; a refuted one is a real finding
+ * (e.g. "a Pi 4 can't run local NLP") surfaced to the user, never papered over.
+ */
+async function verifyPendingClaims(
+  specPath: string,
+  llm: LlmClient,
+  model: string,
+  limit: number,
+  refuted: { id: string; evidence: string }[],
+): Promise<boolean> {
+  const pending = [...new Set(unverifiedLoadBearing(parseSpec(readFileSync(specPath, "utf8"), specPath)).map((x) => x.claim))].slice(0, limit);
+  let did = false;
+  for (const cid of pending) {
+    try {
+      const vr = await verifyClaim(parseSpec(readFileSync(specPath, "utf8"), specPath), cid, llm, model);
+      writeFileSync(specPath, yamlStringify(vr.spec));
+      did = true;
+      if (vr.verdict === "refuted") refuted.push({ id: cid, evidence: vr.evidence });
+    } catch {
+      // verification is best-effort; an unverifiable claim just stays a gap
+    }
+  }
+  return did;
 }
 
 function describeGaps(gaps: Improvement[]): string {
@@ -70,12 +103,13 @@ async function generateFill(spec: Spec, gaps: Improvement[], llm: LlmClient, mod
   });
   const parsed = tryParseJson(res.text);
   if (!parsed.ok) return [];
-  const checked = GenSchema.safeParse(parsed.value);
+  // Accept the model's natural op-keyed/section-batched shape, not just canonical.
+  const coerced = coerceRawDeltas((parsed.value as { deltas?: unknown })?.deltas);
+  const checked = GenSchema.safeParse({ deltas: coerced });
   if (checked.success) return checked.data.deltas;
   // salvage individually-valid deltas
-  const raw = (parsed.value as { deltas?: unknown })?.deltas;
   const out: Delta[] = [];
-  if (Array.isArray(raw)) for (const d of raw) {
+  for (const d of coerced) {
     const ok = DeltaSchema.safeParse(d);
     if (ok.success) out.push(ok.data);
   }
@@ -92,6 +126,7 @@ export async function autofillSpec(
   const threshold = opts?.threshold ?? READY_THRESHOLD;
   const applied: Delta[] = [];
   const defaults: string[] = [];
+  const refutedClaims: { id: string; evidence: string }[] = [];
   let rounds = 0;
   let stagnant = 0;
   let score = await scoreSpec(parseSpec(readFileSync(specPath, "utf8"), specPath), { llm, model });
@@ -99,24 +134,48 @@ export async function autofillSpec(
   while (rounds < maxRounds && !score.ready && score.score < threshold) {
     if (score.improvements.length === 0) break;
     const spec = parseSpec(readFileSync(specPath, "utf8"), specPath);
-    const deltas = normalizeDeltas(spec, await generateFill(spec, score.improvements, llm, model));
-    if (deltas.length === 0) break; // model could not produce a fix — stop, surface to user
+    const raw = normalizeDeltas(spec, await generateFill(spec, score.improvements, llm, model));
+    // Invariant: autofill DECIDES, it never adds a blocker. Force any
+    // open_question the model tried to add to non-blocking (the cheap model
+    // sometimes asks instead of deciding, which would peg the score forever).
+    const deltas = raw.map((d) =>
+      d.section === "open_questions" && d.op === "add" && d.value && typeof d.value === "object"
+        ? { ...d, value: { ...(d.value as Record<string, unknown>), blocking: false } }
+        : d,
+    );
 
-    const { spec: next, applied: app } = applyDeltasLenient(spec, deltas);
-    if (app.length === 0) break; // nothing landed — avoid spinning
-    writeFileSync(specPath, yamlStringify(next));
-    applied.push(...app);
-    for (const d of app) {
-      const stmt = (d.value as { statement?: unknown } | undefined)?.statement;
-      if (d.section === "decisions" && typeof stmt === "string" && /^ser default:/i.test(stmt)) defaults.push(stmt);
+    let landed = 0;
+    if (deltas.length > 0) {
+      const { spec: next, applied: app } = applyDeltasLenient(spec, deltas);
+      if (app.length > 0) {
+        writeFileSync(specPath, yamlStringify(next));
+        applied.push(...app);
+        landed = app.length;
+        for (const d of app) {
+          const stmt = (d.value as { statement?: unknown } | undefined)?.statement;
+          if (d.section === "decisions" && typeof stmt === "string" && /^ser default:/i.test(stmt)) defaults.push(stmt);
+        }
+      }
     }
+    // "build it anyway" means decide-for-me: a blocking question is a
+    // contradiction in autofill mode. De-block all open questions (they stay
+    // as advisory notes the user can re-raise) so they can't peg the score.
+    const cur = parseSpec(readFileSync(specPath, "utf8"), specPath);
+    if (cur.open_questions.some((q) => q.blocking)) {
+      writeFileSync(specPath, yamlStringify({ ...cur, open_questions: cur.open_questions.map((q) => ({ ...q, blocking: false })) }));
+      landed += 1;
+    }
+    // Fact-check the load-bearing claims this spec now rests on (the planning
+    // hour). This can make progress even when the fill produced nothing.
+    const verified = await verifyPendingClaims(specPath, llm, model, 2, refutedClaims);
+    if (landed === 0 && !verified) break; // genuinely stuck — surface to user
 
     const prev = score.score;
-    score = await scoreSpec(next, { llm, model });
+    score = await scoreSpec(parseSpec(readFileSync(specPath, "utf8"), specPath), { llm, model });
     rounds += 1;
     stagnant = score.score > prev ? 0 : stagnant + 1;
     if (stagnant >= 2) break; // two rounds without gain — genuinely stuck
   }
 
-  return { rounds, finalScore: score, applied, defaults, reachedReady: score.ready };
+  return { rounds, finalScore: score, applied, defaults, refutedClaims, reachedReady: score.ready };
 }

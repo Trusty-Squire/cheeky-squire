@@ -180,15 +180,58 @@ export function applyDeltas(spec: Spec, deltas: Delta[]): Spec {
   return checked.data;
 }
 
+const DELTA_OPS = new Set(["add", "modify", "remove", "resolve"]);
+const DELTA_SECTIONS = new Set(["thesis", "scope_fence", "requirements", "decisions", "claims", "open_questions"]);
+
+/**
+ * Accept the model's NATURAL delta shapes, not just our canonical one. The
+ * cheap model reliably emits op-keyed, section-batched deltas like
+ *   {"add": {"requirements": [item, item]}}
+ *   {"remove": {"requirements": ["R1"]}}
+ *   {"resolve": {"open_questions": ["Q1"]}}
+ * Our schema wanted flat {section, op, value} one-per-delta and .strict()
+ * dropped all of the above — so autofill did nothing against the real model.
+ * This flattens any shape into canonical raw deltas (still unvalidated; the
+ * DeltaSchema parses them next). The harness adapts to the model.
+ */
+export function coerceRawDeltas(raw: unknown): unknown[] {
+  if (!Array.isArray(raw)) return [];
+  const out: unknown[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    if (typeof e.section === "string" && typeof e.op === "string") {
+      out.push(e); // already canonical
+      continue;
+    }
+    const opKey = Object.keys(e).find((k) => DELTA_OPS.has(k));
+    if (!opKey || !e[opKey] || typeof e[opKey] !== "object") continue;
+    for (const [section, payload] of Object.entries(e[opKey] as Record<string, unknown>)) {
+      if (!DELTA_SECTIONS.has(section)) continue;
+      if (section === "thesis") {
+        out.push({ section, op: opKey, value: payload });
+      } else if (opKey === "remove" || opKey === "resolve") {
+        for (const id of Array.isArray(payload) ? payload : [payload]) {
+          out.push({ section, op: opKey, id: typeof id === "string" ? id : (id as { id?: unknown })?.id });
+        }
+      } else {
+        for (const item of Array.isArray(payload) ? payload : [payload]) {
+          if (section === "scope_fence") out.push({ section, op: opKey, value: item });
+          else out.push({ section, op: opKey, value: item, id: (item as { id?: unknown })?.id });
+        }
+      }
+    }
+  }
+  return out;
+}
+
 /** Keep the conversation, salvage individually-valid deltas, drop the rest. */
 export function salvageBatch(raw: unknown): DeltaBatch {
   const o = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
   const deltas: Delta[] = [];
-  if (Array.isArray(o.deltas)) {
-    for (const d of o.deltas) {
-      const ok = DeltaSchema.safeParse(d);
-      if (ok.success) deltas.push(ok.data);
-    }
+  for (const d of coerceRawDeltas(o.deltas)) {
+    const ok = DeltaSchema.safeParse(d);
+    if (ok.success) deltas.push(ok.data);
   }
   const action = (TALK_ACTIONS as readonly string[]).includes(o.action as string)
     ? (o.action as DeltaBatch["action"])
@@ -436,7 +479,13 @@ export class SpecSession {
       this.usage.out += res.outTokens;
       const parsed = tryParseJson(res.text);
       if (parsed.ok) {
-        const checked = DeltaBatchSchema.safeParse(parsed.value);
+        // Coerce the model's natural op-keyed shape to canonical BEFORE schema
+        // validation, so the happy path works first try (no wasted retry).
+        const coerced =
+          parsed.value && typeof parsed.value === "object"
+            ? { ...(parsed.value as object), deltas: coerceRawDeltas((parsed.value as { deltas?: unknown }).deltas) }
+            : parsed.value;
+        const checked = DeltaBatchSchema.safeParse(coerced);
         if (checked.success) {
           const b = markDrift(checked.data);
           return { ...b, deltas: normalizeDeltas(spec, b.deltas) };

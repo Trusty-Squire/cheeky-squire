@@ -282,6 +282,30 @@ open_questions:
     expect(next.decisions[0]!.claims).toEqual([claimId]); // reference rewritten to the minted id
   });
 
+  it("accepts the model's NATURAL op-keyed shape (captured real qwen output)", async () => {
+    const { coerceRawDeltas, normalizeDeltas } = await import("../../src/contract/spec-session.js");
+    const spec = parseSpec(baseSpec); // R1 real, Q1 open
+    // exactly the shape the live model returned: op-keyed, section-batched
+    const realShape = [
+      { add: { requirements: [
+        { statement: "voice interaction", acceptance: { tier: 1, gate: "node --test voice" } },
+        { statement: "emotional modeling", acceptance: { tier: 4, artifact: "emo.log" } },
+      ] } },
+      { remove: { requirements: ["R1"] } },
+      { add: { decisions: [{ statement: "ser default: raspberry pi", rationale: "affordable", claims: [] }] } },
+      { resolve: { open_questions: ["Q1"] } },
+    ];
+    const canonical = coerceRawDeltas(realShape);
+    // 2 requirement adds + 1 remove + 1 decision add + 1 resolve = 5 flat deltas
+    expect(canonical).toHaveLength(5);
+    const next = applyDeltas(spec, normalizeDeltas(spec, canonical as never));
+    expect(next.requirements.find((r) => r.id === "R1")).toBeUndefined(); // removed
+    expect(next.requirements.length).toBe(2); // the two new capabilities
+    expect(next.requirements.every((r) => /^R\d+$/.test(r.id))).toBe(true);
+    expect(next.decisions[0]!.statement).toContain("ser default");
+    expect(next.open_questions).toHaveLength(0); // Q1 resolved
+  });
+
   it("an unresolvable remove/resolve drops silently instead of throwing", async () => {
     const { normalizeDeltas } = await import("../../src/contract/spec-session.js");
     const spec = parseSpec(baseSpec);

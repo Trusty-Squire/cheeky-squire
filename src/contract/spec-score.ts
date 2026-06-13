@@ -61,21 +61,22 @@ const DiagnosisSchema = z.object({
 
 export const DIAGNOSTIC_PROMPT = `${CASTELLAN_IDENTITY}
 
-Your job here: make this spec more BUILDABLE and VERIFIABLE. Diagnose concrete
-gaps a cheap agent loop would trip on — do not rewrite it, do not praise it.
-For each gap output: dimension, severity (blocking|major|minor), the problem in
-one line, a SPECIFIC suggestion (the fix you'd apply), and needsUser.
+Your job here: judge whether this spec is BUILDABLE, and flag only the gaps
+that genuinely matter. Do not rewrite it, do not praise it, do not pad the list
+to seem thorough. If the spec is decomposed and every requirement is gated,
+return an EMPTY list — "good enough to build" is the goal, not perfection.
+
+Output at most the 5 most important gaps. For each: dimension, severity
+(major|minor — you do NOT assign "blocking"; objective blockers are detected
+mechanically), the problem in one line, a SPECIFIC suggestion, and needsUser.
+- major = should be fixed before building (a real capability is missing, a
+  gate would pass on a stub).
+- minor = a nice-to-have improvement.
 
 needsUser=true ONLY for a genuine fork you cannot decide for the user — a real
 product choice (target hardware/runtime, a subjective quality bar like what
-"safe" or "believable" must mean, a scope tradeoff). needsUser=false when you
-can just propose the fix yourself (splitting a coarse requirement, choosing a
-gate from the ladder, naming a default).
-
-Look hardest for: a single coarse requirement that should be several; gates
-that a STUB would pass (no varied inputs / no real assertion); subjective
-quality with no tier-4 artifact; missing capabilities the thesis implies;
-unstated assumptions that are load-bearing.
+"safe" or "believable" must mean, an age/scope tradeoff). needsUser=false when
+you can just propose the fix yourself.
 
 ${GATE_LADDER_DOC}
 
@@ -196,6 +197,12 @@ export async function scoreSpec(
       // diagnosis is best-effort; the mechanical floor always stands
     }
   }
+  // The model ADVISES but cannot block: clamp any "blocking" it emits to major
+  // (only the mechanical floor produces blockers) and cap the long tail so an
+  // over-eager diagnostician can't peg the score to 0 forever.
+  model = model
+    .map((i) => (i.severity === "blocking" ? { ...i, severity: "major" as const } : i))
+    .slice(0, 6);
   return scoreFromImprovements(mergeImprovements(mech, model));
 }
 
